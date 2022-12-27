@@ -1,0 +1,79 @@
+import time
+import os
+import platform
+import argparse
+
+import torch
+import torch.multiprocessing as mp
+import torch.distributed as dist
+
+from datasets.build import get_cifar10
+from utils.config import Config
+from utils.util import set_seed
+from utils.trainer import Trainer
+
+def get_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config', type=str, help='config file path')
+    args = parser.parse_args()
+
+    return args
+
+def get_config(args: argparse.Namespace) -> Config:
+    cfg = Config.fromfile(args.config)
+
+    cfg.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+
+    # worker
+    cfg.work_dir = os.path.join(cfg.work_dir, f'{cfg.timestamp}')
+    cfg.num_workers = min(cfg.num_workers, mp.cpu_count()-2)
+    os.makedirs(cfg.work_dir, exist_ok=True)
+
+    # cfgname
+    cfg.cfgname = os.path.splitext(os.path.basename(args.config))[0]
+    assert cfg.cfgname is not None, f'{cfg.cfgname} is not exist'
+
+    # seed
+    if not hasattr(cfg, 'seed'):
+        cfg.seed = 25
+    set_seed(cfg.seed)
+
+    return cfg
+
+def main_worker(rank, world_size, cfg):
+    print(f'==> start rank: {rank}')
+
+    cfg.local_rank = rank % 8
+    torch.cuda.set_device(rank)
+    set_seed(cfg.seed+rank, cuda_deterministic=False)
+
+    print(f'System : {platform.system()}')
+    if platform.system() == 'Windows':
+        dist.init_process_group(backend='gloo', init_method=f'tcp://localhost:{cfg.port}',
+                            world_size=world_size, rank=rank)
+    else: # Linux
+        dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
+                            world_size=world_size, rank=rank)
+    
+    trainer = Trainer(cfg, rank)
+    trainer.fit()
+    pass
+
+def main():
+    args = get_args()
+    cfg = get_config(args)
+
+    cfg.world_size = torch.cuda.device_count()
+    print(f'GPUs on this node: {cfg.world_size}')
+    cfg.bsz_gpu = int(cfg.batch_size / cfg.world_size)
+    print('batch_size per gpu:', cfg.bsz_gpu)
+
+    log_file = os.path.join(cfg.work_dir, f'{cfg.timestamp}.cfg')
+    with open(log_file, 'a') as f:
+        f.write(cfg.pretty_text)
+
+    if cfg.world_size > 0:
+        mp.spawn(main_worker, nprocs = cfg.world_size, args=(cfg.world_size, cfg))
+
+if __name__ == '__main__':
+    main()
