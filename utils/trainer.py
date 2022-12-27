@@ -43,7 +43,7 @@ class Trainer(object):
         # build dataset
         if cfg.dataset == 'cifar10':
             self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
-        self.valid_dataset = torchvision.datasets.CIFAR10(root='./data/cifar10/valid', download=False,train=False,transform=valid_transform())
+
         train_sampler = torch.utils.data.distributed.DistributedSampler
 
         self.labeled_trainloader = DataLoader(

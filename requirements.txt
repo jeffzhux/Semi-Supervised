@@ -1,3 +1,4 @@
 addict
 yapf
 regex
+tensorboard

@@ -9,8 +9,8 @@ save_interval = 20
 # train
 num_classes = 10
 epochs = 100 # 1024
-iters = 1024 # 1024
-batch_size = 8
+iters = 1 # 1024
+batch_size = 8 #128
 mu = 7 # unlabeled data batch_size = batch_size * mu
 
 # model
@@ -61,13 +61,13 @@ data = dict(
 
     base = dict(
         type = 'CIFAR10',
-        root = './data/cifar10/train',
+        root = './data/cifar10',
         train = True,
         download = False
     ),
     train_labeled = dict(
         type='CIFAR10SSL',
-        root='./data/cifar10/train',
+        root='./data/cifar10',
         train=True,
         transform = dict(
             type='weak_transform',
@@ -77,7 +77,7 @@ data = dict(
     ),
     train_unlabeled = dict(
         type='CIFAR10SSL',
-        root='./data/cifar10/train',
+        root='./data/cifar10',
         train=True,
         transform = dict(
             type='FixMatchTransform',
@@ -95,7 +95,7 @@ data = dict(
     ),
     valid = dict(
         type='CIFAR10',
-        root='./data/cifar10/valid',
+        root='./data/cifar10',
         train=False,
         download = False,
         transform = dict(
