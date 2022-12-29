@@ -2,3 +2,4 @@ addict
 yapf
 regex
 tensorboard
+tqdm

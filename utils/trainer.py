@@ -1,5 +1,6 @@
 import os
 import time
+from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
@@ -51,8 +52,10 @@ class Trainer(object):
             sampler=train_sampler(self.labeled_dataset),
             batch_size=self.cfg.batch_size,
             num_workers=self.cfg.num_workers,
-            # pin_memory=True,
-            drop_last=True
+            pin_memory=True,
+            drop_last=True,
+            prefetch_factor=2,
+            persistent_workers=True
         )
 
         self.unlabeled_trainloader = DataLoader(
@@ -60,8 +63,10 @@ class Trainer(object):
             sampler=train_sampler(self.unlabeled_dataset),
             batch_size=self.cfg.batch_size * self.cfg.mu,
             num_workers=self.cfg.num_workers,
-            # pin_memory=True,
-            drop_last=True
+            pin_memory=True,
+            drop_last=True,
+            prefetch_factor=2,
+            persistent_workers=True
         )
 
         self.valid_loader = DataLoader(
@@ -104,6 +109,7 @@ class Trainer(object):
         labeled_iter = iter(self.labeled_trainloader)
         unlabeled_iter = iter(self.unlabeled_trainloader)
 
+        p_bar = tqdm(range(self.cfg.iters), disable=self.rank not in [-1, 0])
         for batch_idx in range(self.cfg.iters):
             # labeled data
             try:
@@ -111,7 +117,9 @@ class Trainer(object):
             except:
                 labeled_epoch += 1
                 self.labeled_trainloader.sampler.set_epoch(labeled_epoch)
+                print(f'*-*-before label iter_{self.rank}*-*-')
                 labeled_iter = iter(self.labeled_trainloader)
+                print(f'*-*-after label iter_{self.rank}*-*-')
                 inputs_x, targets_x = next(labeled_iter)
 
             # unlabeled data
@@ -120,14 +128,15 @@ class Trainer(object):
             except:
                 unlabeled_epoch += 1
                 self.unlabeled_trainloader.sampler.set_epoch(unlabeled_epoch)
+                print(f'*-*-before unlabel iter_{self.rank}*-*-')
                 unlabeled_iter = iter(self.unlabeled_trainloader)
+                print(f'*-*-after unlabel iter_{self.rank}*-*-')
                 (inputs_wu, inputs_su), _ = next(unlabeled_iter)
             
             data_time.update(time.time() - iter_end)
             batch_size = inputs_x.size(0)
-
-            inputs = interleave(torch.cat((inputs_x, inputs_wu, inputs_su)), 2*self.cfg.mu+1).cuda()
-            targets_x = targets_x.cuda().long()
+            inputs = interleave(torch.cat((inputs_x, inputs_wu, inputs_su)), 2*self.cfg.mu+1).cuda(non_blocking=True)
+            targets_x = targets_x.cuda(non_blocking=True).long()
             
             logits = self.model(inputs)
             logits = de_interleave(logits, 2*self.cfg.mu+1)
@@ -150,17 +159,18 @@ class Trainer(object):
             mask_probs.update(max_probs.mean().item())
 
             # print info
-            if (batch_idx + 1) % self.cfg.log_interval == 0 and self.logger is not None:
-                lr = self.optimizer.param_groups[0]['lr']
-                self.logger.info(f'[Epoch]/[Iter]: [{epoch:4}/{self.cfg.epochs:4}]/[{batch_idx:4}/{self.cfg.iters:4}] - '
-                        f'Data: {data_time.avg:.3f}, '
-                        f'Batch: {batch_time.avg:.3f}, '
-                        f'lr: {lr:.5f}, '
-                        f'loss: {losses.avg:.3f}, '
-                        f'loss_x: {losses_x.avg:.3f}, '
-                        f'loss_u: {losses_u.avg:.3f}, '
-                        f'mask: {mask_probs.avg:.3f} '
-                )
+            lr = self.optimizer.param_groups[0]['lr']
+            p_bar.set_description(
+                f'[Epoch]/[Iter]: [{epoch:4}/{self.cfg.epochs:4}]/[{batch_idx:4}/{self.cfg.iters:4}] - '
+                f'Data: {data_time.avg:.3f}, '
+                f'Batch: {batch_time.avg:.3f}, '
+                f'lr: {lr:.5f}, '
+                f'loss: {losses.avg:.3f}, '
+                f'loss_x: {losses_x.avg:.3f}, '
+                f'loss_u: {losses_u.avg:.3f}, '
+                f'mask: {mask_probs.avg:.3f} '
+            )
+            p_bar.update()
 
         if self.logger is not None: 
             epoch_time = format_time(time.time() - epoch_end)

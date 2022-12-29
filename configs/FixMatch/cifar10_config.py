@@ -9,8 +9,8 @@ save_interval = 20
 # train
 num_classes = 10
 epochs = 100 # 1024
-iters = 1 # 1024
-batch_size = 8 #128
+iters = 1024 # 1024
+batch_size = 128 #128
 mu = 7 # unlabeled data batch_size = batch_size * mu
 
 # model
@@ -52,7 +52,7 @@ loss = dict(
 )
 
 # data
-num_workers = 8
+num_workers = 4
 dataset = 'cifar10'
 data = dict(
     split = dict(
