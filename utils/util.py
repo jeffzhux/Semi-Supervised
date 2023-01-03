@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import random
+from contextlib import contextmanager
 
 class Metric:
     def __init__(self, num_classes):
@@ -401,3 +402,11 @@ def set_weight_decay(
             param_groups.append({"params":params[key], "weight_decay": params_weight_decay[key]})
     
     return param_groups
+
+@contextmanager
+def torch_distributed_zero_first(rank):
+    if rank not in [-1, 0]:
+        torch.distributed.barrier()
+    yield
+    if rank == 0:
+        torch.distributed.barrier()

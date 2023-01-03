@@ -4,14 +4,11 @@ from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
-import torchvision.transforms as T
-import torchvision
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import logging
 
 from datasets.transforms import valid_transform
-from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time
+from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first
 from utils.config import ConfigDict
 from utils.build import build_logger
 from datasets.build import get_cifar10
@@ -41,9 +38,10 @@ class Trainer(object):
             self.writer = SummaryWriter(log_dir=os.path.join(cfg.work_dir, 'tensorboard'))
             self.logger = build_logger(self.cfg.work_dir, 'train')
 
-        # build dataset
-        if cfg.dataset == 'cifar10':
-            self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
+        with torch_distributed_zero_first(self.rank):
+            # build dataset
+            if cfg.dataset == 'cifar10':
+                self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
 
         train_sampler = torch.utils.data.distributed.DistributedSampler
 
@@ -74,18 +72,21 @@ class Trainer(object):
             batch_size=self.cfg.batch_size,
             num_workers=self.cfg.num_workers,
             shuffle=False,
-            pin_memory=True
+            pin_memory=True,
+            persistent_workers=True
         )
-
+        
         # build model
-        self.model = build_model(cfg.model)
+        with torch_distributed_zero_first(self.rank):
+            self.model = build_model(cfg.model)
         self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model).cuda()
-        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], find_unused_parameters=True)
+        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], output_device=cfg.local_rank, find_unused_parameters=True)
         self.model_without_ddp = self.model.module
         
         # build criterion & optimizer
         self.criterion = build_loss(cfg.loss).cuda()
         self.optimizer = build_optimizer(cfg.optimizer, self.model.parameters())
+        self.optimizer.zero_grad()
 
         self.start_epoch = 1
 
@@ -117,9 +118,7 @@ class Trainer(object):
             except:
                 labeled_epoch += 1
                 self.labeled_trainloader.sampler.set_epoch(labeled_epoch)
-                print(f'*-*-before label iter_{self.rank}*-*-')
                 labeled_iter = iter(self.labeled_trainloader)
-                print(f'*-*-after label iter_{self.rank}*-*-')
                 inputs_x, targets_x = next(labeled_iter)
 
             # unlabeled data
@@ -128,9 +127,7 @@ class Trainer(object):
             except:
                 unlabeled_epoch += 1
                 self.unlabeled_trainloader.sampler.set_epoch(unlabeled_epoch)
-                print(f'*-*-before unlabel iter_{self.rank}*-*-')
                 unlabeled_iter = iter(self.unlabeled_trainloader)
-                print(f'*-*-after unlabel iter_{self.rank}*-*-')
                 (inputs_wu, inputs_su), _ = next(unlabeled_iter)
             
             data_time.update(time.time() - iter_end)
