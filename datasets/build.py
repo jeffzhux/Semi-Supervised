@@ -6,28 +6,47 @@ import datasets
 from datasets.transforms.build import build_transform
 from utils.config import ConfigDict
 
+# def x_u_split(labels, args):
+#     labels = np.array(labels)
+#     label_per_class = args.num_labeled // args.num_classes
+#     unlabeled_idx = []
+#     labeled_idx = []
+#     for i in range(args.num_classes):
+#         idx = np.where(labels == i)[0]
+#         l_idx = np.random.choice(idx, label_per_class, False)
+#         unl_idx = np.setdiff1d(idx, l_idx)
+
+#         unlabeled_idx.extend(unl_idx)
+#         labeled_idx.extend(l_idx)
+#     labeled_idx = np.array(labeled_idx)
+#     assert len(labeled_idx) == args.num_labeled
+
+#     # if args.expand_labels or args.num_labeled < args.batch_size:
+#     #     num_expand_x = math.ceil(
+#     #         args.batch_size * args.eval_step / args.num_labeled)
+#     #     labeled_idx = np.hstack([labeled_idx for _ in range(num_expand_x)])
+#     # np.random.shuffle(labeled_idx)
+#     return labeled_idx, unlabeled_idx
+
 def x_u_split(labels, args):
-    label_per_class = args.num_labeled // args.num_classes
     labels = np.array(labels)
+    max_class = len(labels) // args.num_classes
     unlabeled_idx = []
     labeled_idx = []
     for i in range(args.num_classes):
+        num_class = max_class * ((1/args.gamma)**(i/(args.num_classes-1)))
+        num_label_class = round(num_class * args.beta)
+
         idx = np.where(labels == i)[0]
-        l_idx = np.random.choice(idx, label_per_class, False)
+        idx = np.random.choice(idx, int(num_class), False)
+        l_idx = np.random.choice(idx, num_label_class, False)
         unl_idx = np.setdiff1d(idx, l_idx)
 
         unlabeled_idx.extend(unl_idx)
         labeled_idx.extend(l_idx)
     labeled_idx = np.array(labeled_idx)
-    assert len(labeled_idx) == args.num_labeled
 
-    # if args.expand_labels or args.num_labeled < args.batch_size:
-    #     num_expand_x = math.ceil(
-    #         args.batch_size * args.eval_step / args.num_labeled)
-    #     labeled_idx = np.hstack([labeled_idx for _ in range(num_expand_x)])
-    # np.random.shuffle(labeled_idx)
     return labeled_idx, unlabeled_idx
-
 
 def get_cifar10(cfg:ConfigDict):
     args = cfg.copy()

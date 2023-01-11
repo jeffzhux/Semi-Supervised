@@ -1,5 +1,6 @@
 import os
 import time
+import numpy as np
 from tqdm import tqdm
 
 import torch
@@ -11,9 +12,26 @@ from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time
 from utils.config import ConfigDict
 from utils.build import build_logger
 from datasets.build import get_cifar10
+from datasets.sampler.distributed import WeightDistributedSampler
+
 from models.build import build_model
 from losses.build import build_loss
 from optimizers.build import build_optimizer
+
+class MovingAverage:
+    """Class which accumilates moving average of distribution of labels."""
+    def __init__(self, num_classes, buffer_size = 128, device='cuda'):
+        # Mean
+        self.ma = torch.ones(size=(buffer_size, num_classes), device=device) / num_classes
+
+    def __call__(self):
+        v = self.ma.mean(dim=0)
+        print(self.ma.sum())
+        return v / self.ma.sum()
+    
+    def update(self, entry):
+        entry = torch.mean(entry, dim=0, keepdim=True)
+        self.ma = torch.cat([self.ma[1:], entry])
 
 def interleave(x, size):
     s = list(x.shape)
@@ -41,11 +59,15 @@ class Trainer(object):
             if cfg.dataset == 'cifar10':
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler
-
+         # buffer
+        self.p_model = MovingAverage(num_classes=10)
+        sample_weight = (np.array(self.unlabeled_dataset.p_data)[::-1]/self.unlabeled_dataset.p_data[0]).tolist()
+        
+        distributedSampler = torch.utils.data.distributed.DistributedSampler
+        weightDistributedSampler = WeightDistributedSampler
         self.labeled_trainloader = DataLoader(
             self.labeled_dataset,
-            sampler=train_sampler(self.labeled_dataset),
+            sampler=distributedSampler(self.labeled_dataset),
             batch_size=self.cfg.batch_size,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -56,7 +78,7 @@ class Trainer(object):
 
         self.unlabeled_trainloader = DataLoader(
             self.unlabeled_dataset,
-            sampler=train_sampler(self.unlabeled_dataset),
+            sampler=weightDistributedSampler(self.unlabeled_dataset, sample_weight),
             batch_size=self.cfg.batch_size * self.cfg.mu,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -87,7 +109,21 @@ class Trainer(object):
         self.optimizer.zero_grad()
 
         self.start_epoch = 1
-        
+    
+    def _get_pseudo_target(logits, temperature = 1):
+        """Gets pseudo target from the list of logits.
+
+        Args:
+            logits: 2-D Tensor
+            temperature: Scalar for logit (or probability) scaling.
+
+        Return:
+            pseudo_target: 2-D Tensor.
+            pseudo_probs: 2-D Tensor.
+        """
+        pseudo_probs = F.softmax(logits, dim=-1)
+        target_dist = torch.pow()
+
     def train(self, epoch):
         self.model.train()
 
@@ -121,13 +157,16 @@ class Trainer(object):
 
             # unlabeled data
             try:
-                (inputs_wu, inputs_su), _ = next(unlabeled_iter)
+                # (inputs_wu, inputs_su), _ = next(unlabeled_iter)
+                (inputs_wu, inputs_su), targets_unlabel = next(unlabeled_iter)
+                print(f'rank {self.rank} : {torch.sort(targets_unlabel)[0]}')
             except:
                 unlabeled_epoch += 1
                 self.unlabeled_trainloader.sampler.set_epoch(unlabeled_epoch)
                 unlabeled_iter = iter(self.unlabeled_trainloader)
                 (inputs_wu, inputs_su), _ = next(unlabeled_iter)
-            
+            time.sleep(1)
+            exit()
             data_time.update(time.time() - iter_end)
             batch_size = inputs_x.size(0)
             inputs = interleave(torch.cat((inputs_x, inputs_wu, inputs_su)), 2*self.cfg.mu+1).cuda(non_blocking=True)
@@ -149,6 +188,8 @@ class Trainer(object):
             self.optimizer.step()
             self.optimizer.zero_grad()
 
+            self.p_model.update(F.softmax(logits_su.clone().detach(), dim=-1))
+            
             batch_time.update(time.time() - iter_end)
             iter_end = time.time()
             mask_probs.update(max_probs.mean().item())

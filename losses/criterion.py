@@ -20,3 +20,8 @@ class FixMatchLoss(nn.Module):
         Lu = (self.u_criterion(logits_su, targets_u) * mask).mean()
 
         return Lx + self.lambda_u * Lu, Lx, Lu, max_probs
+
+class CReSTLoss(nn.Module):
+    def __init__(self, threshold):
+        super(CReSTLoss, self).__init__()
+        

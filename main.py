@@ -7,9 +7,9 @@ import torch
 import torch.multiprocessing as mp
 import torch.distributed as dist
 
-from datasets.build import get_cifar10
 from utils.config import Config
 from utils.util import set_seed
+from crest import Trainer as CReST_Trainer
 from utils.trainer import Trainer
 
 def get_args() -> argparse.Namespace:
@@ -55,7 +55,7 @@ def main_worker(rank, world_size, cfg):
         dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
                             world_size=world_size, rank=rank)
     
-    trainer = Trainer(cfg, rank)
+    trainer = CReST_Trainer(cfg, rank)
     trainer.fit()
     pass
 
