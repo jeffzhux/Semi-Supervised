@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first
+from utils.util import AverageMeter
+from utils.util import accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first, kl_divergence
 from utils.config import ConfigDict
 from utils.build import build_logger
 from datasets.build import get_cifar10
@@ -26,8 +27,7 @@ class MovingAverage:
 
     def __call__(self):
         v = self.ma.mean(dim=0)
-        print(self.ma.sum())
-        return v / self.ma.sum()
+        return v / v.sum()
     
     def update(self, entry):
         entry = torch.mean(entry, dim=0, keepdim=True)
@@ -59,7 +59,8 @@ class Trainer(object):
             if cfg.dataset == 'cifar10':
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
 
-         # buffer
+        self.gt_p_data = torch.as_tensor(self.labeled_dataset.p_data, device='cuda')
+        # buffer
         self.p_model = MovingAverage(num_classes=10)
         sample_weight = (np.array(self.unlabeled_dataset.p_data)[::-1]/self.unlabeled_dataset.p_data[0]).tolist()
         
@@ -109,24 +110,16 @@ class Trainer(object):
         self.optimizer.zero_grad()
 
         self.start_epoch = 1
-    
-    def _get_pseudo_target(logits, temperature = 1):
-        """Gets pseudo target from the list of logits.
-
-        Args:
-            logits: 2-D Tensor
-            temperature: Scalar for logit (or probability) scaling.
-
-        Return:
-            pseudo_target: 2-D Tensor.
-            pseudo_probs: 2-D Tensor.
-        """
-        pseudo_probs = F.softmax(logits, dim=-1)
-        target_dist = torch.pow()
+        self.epochs = cfg.epochs
+        self.dalign_t = cfg.dalign_t
+    def _get_dalign_t(self, current_epoch):
+        cur = current_epoch / (self.epochs - 1)
+        return (1.0 - cur) * 1.0 + cur * self.dalign_t
 
     def train(self, epoch):
         self.model.train()
 
+        # log
         epoch_end  = time.time()
         iter_end = time.time()
         batch_time = AverageMeter()
@@ -136,6 +129,7 @@ class Trainer(object):
         losses_u = AverageMeter()
         mask_probs = AverageMeter()
 
+        # data
         labeled_epoch = 0
         unlabeled_epoch = 0
         self.labeled_trainloader.sampler.set_epoch(labeled_epoch)
@@ -143,6 +137,10 @@ class Trainer(object):
         
         labeled_iter = iter(self.labeled_trainloader)
         unlabeled_iter = iter(self.unlabeled_trainloader)
+
+        # utils
+        # control the temperature-scaled distribution
+        current_dalign_t = self._get_dalign_t(epoch)
 
         p_bar = tqdm(range(self.cfg.iters), disable=self.rank not in [-1, 0])
         for batch_idx in range(self.cfg.iters):
@@ -157,16 +155,13 @@ class Trainer(object):
 
             # unlabeled data
             try:
-                # (inputs_wu, inputs_su), _ = next(unlabeled_iter)
-                (inputs_wu, inputs_su), targets_unlabel = next(unlabeled_iter)
-                print(f'rank {self.rank} : {torch.sort(targets_unlabel)[0]}')
+                (inputs_wu, inputs_su), _ = next(unlabeled_iter)
             except:
                 unlabeled_epoch += 1
                 self.unlabeled_trainloader.sampler.set_epoch(unlabeled_epoch)
                 unlabeled_iter = iter(self.unlabeled_trainloader)
                 (inputs_wu, inputs_su), _ = next(unlabeled_iter)
-            time.sleep(1)
-            exit()
+
             data_time.update(time.time() - iter_end)
             batch_size = inputs_x.size(0)
             inputs = interleave(torch.cat((inputs_x, inputs_wu, inputs_su)), 2*self.cfg.mu+1).cuda(non_blocking=True)
@@ -177,8 +172,8 @@ class Trainer(object):
             logits_x = logits[:batch_size]
             logits_wu, logits_su = logits[batch_size:].chunk(2)
             del logits
-
-            loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x)
+            loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.gt_p_data, self.p_model(), current_dalign_t)
+            
             loss.backward()
 
             losses.update(loss.item())
@@ -188,6 +183,7 @@ class Trainer(object):
             self.optimizer.step()
             self.optimizer.zero_grad()
 
+            # pseudo label buffer
             self.p_model.update(F.softmax(logits_su.clone().detach(), dim=-1))
             
             batch_time.update(time.time() - iter_end)
@@ -211,6 +207,9 @@ class Trainer(object):
         if self.logger is not None: 
             epoch_time = format_time(time.time() - epoch_end)
             self.logger.info(f'Epoch [{epoch}] - epoch_time: {epoch_time}, '
+                        f'Data: {data_time.avg:.3f}, '
+                        f'Batch: {batch_time.avg:.3f}, '
+                        f'lr: {lr:.5f}, '
                         f'train_loss: {losses.avg:.3f}, '
                         f'train_loss_x: {losses_x.avg:.3f}, '
                         f'train_loss_u: {losses_u.avg:.3f}, '
@@ -223,7 +222,13 @@ class Trainer(object):
             self.writer.add_scalar('Train/loss', losses.avg, epoch)
             self.writer.add_scalar('Train/loss_x', losses_x.avg, epoch)
             self.writer.add_scalar('Train/loss_u', losses_u.avg, epoch)
-            self.writer.add_scalar('Train/mask', mask_probs.avg, epoch)
+            self.writer.add_scalar('Monitor/mask', mask_probs.avg, epoch)
+            self.writer.add_scalar('Monitor/kl',
+                kl_divergence(
+                    prob_a = torch.ones(self.cfg.num_classes, device=self.p_model().device) / self.cfg.num_classes,
+                    prob_b = self.p_model()
+                )
+            )
 
 
     def valid(self, epoch):

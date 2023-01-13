@@ -410,3 +410,11 @@ def torch_distributed_zero_first(rank):
     yield
     if rank == 0:
         torch.distributed.barrier()
+
+def kl_divergence(prob_a, prob_b):
+    with torch.no_grad():
+        eps = 1e-6
+        prob_a = torch.clamp(prob_a, eps, 1.0 - eps)
+        prob_b = torch.clamp(prob_b, eps, 1.0 - eps)
+
+        return torch.sum(prob_a * (torch.log(prob_a)) - prob_b * torch.log(prob_b))

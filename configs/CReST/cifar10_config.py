@@ -2,16 +2,18 @@
 
 # log & save
 port = 10001
-work_dir = './experiment/cifar10/CRest'
+work_dir = './experiment/cifar10/CReST'
 log_interval = 100
 save_interval = 20
 
 # train
 num_classes = 10
-epochs = 1 # 1024
+epochs = 2 # 1024
 iters = 1 # 1024
 batch_size = 16 #128
 mu = 7 # unlabeled data batch_size = batch_size * mu
+dalign_t = 0.5 # temperature-scaled distribution
+
 
 # model
 model = dict(
@@ -45,7 +47,7 @@ lr_cfg = dict(  # passed to adjust_learning_rate(cfg=lr_cfg)
 
 # loss
 loss = dict(
-    type = 'FixMatchLoss',
+    type = 'CReSTLoss',
     threshold = 0.95,
     lambda_u = 1,
     T = 1
