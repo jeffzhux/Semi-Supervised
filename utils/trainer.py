@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first
+from utils.util import AverageMeter, accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first, kl_divergence
 from utils.config import ConfigDict
 from utils.build import build_logger
 from datasets.build import get_cifar10
@@ -170,6 +170,9 @@ class Trainer(object):
         if self.logger is not None: 
             epoch_time = format_time(time.time() - epoch_end)
             self.logger.info(f'Epoch [{epoch}] - epoch_time: {epoch_time}, '
+                        f'Data: {data_time.avg:.3f}, '
+                        f'Batch: {batch_time.avg:.3f}, '
+                        f'lr: {lr:.5f}, '
                         f'train_loss: {losses.avg:.3f}, '
                         f'train_loss_x: {losses_x.avg:.3f}, '
                         f'train_loss_u: {losses_u.avg:.3f}, '
@@ -182,8 +185,7 @@ class Trainer(object):
             self.writer.add_scalar('Train/loss', losses.avg, epoch)
             self.writer.add_scalar('Train/loss_x', losses_x.avg, epoch)
             self.writer.add_scalar('Train/loss_u', losses_u.avg, epoch)
-            self.writer.add_scalar('Train/mask', mask_probs.avg, epoch)
-
+            self.writer.add_scalar('Monitor/mask', mask_probs.avg, epoch)
 
     def valid(self, epoch):
         self.model.eval()

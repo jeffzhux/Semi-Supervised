@@ -55,9 +55,9 @@ def main_worker(rank, world_size, cfg):
         dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
                             world_size=world_size, rank=rank)
     
-    trainer = CReST_Trainer(cfg, rank)
+    # trainer = CReST_Trainer(cfg, rank)
+    trainer = Trainer(cfg, rank)
     trainer.fit()
-    pass
 
 def main():
     args = get_args()
