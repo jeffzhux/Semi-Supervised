@@ -30,18 +30,32 @@ class CReSTLoss(nn.Module):
         self.x_criterion = nn.CrossEntropyLoss(reduction='mean')
         self.u_criterion = nn.CrossEntropyLoss(reduction='none')
 
-    def _get_pseudo_target(self, logit, gt_p_data, p_data, t):
+    # @torch.no_grad
+    # def _get_pseudo_target(self, logit, gt_p_data, p_data, t):
 
-        target_dist = torch.pow(gt_p_data, t)
-        target_dist /= target_dist.sum()
+    #     target_dist = torch.pow(gt_p_data, t)
+    #     target_dist /= target_dist.sum()
 
-        pseudo_probs = F.softmax(logit, dim=-1)
-        pseudo_probs = pseudo_probs * (1e-6 + target_dist) / (1e-6 + p_data)
-        pseudo_probs /= torch.sum(pseudo_probs, dim=-1, keepdim=True)
+    #     q = F.softmax(logit, dim=-1)
+    #     q = q * (1e-6 + target_dist) / (1e-6 + p_data)
+    #     q /= torch.sum(q, dim=-1, keepdim=True)
         
-        max_probs, pseudo_target= torch.max(pseudo_probs, dim=-1)
+    #     max_probs, pseudo_target= torch.max(q, dim=-1)
 
-        return pseudo_target.detach(), max_probs.detach()
+    #     return pseudo_target.detach(), max_probs.detach()
+
+    torch.no_grad
+    def _get_pseudo_target(self, logist_x, logits_wu, t):
+
+        q = F.softmax(logits_wu, dim=-1)
+        q = q * (F.softmax(logist_x, dim=-1)).mean() / q.mean()
+        
+        pt = q ** 2
+        targets_u = pt / pt.sum(dim=-1, keepdim=True)
+        max_probs, pseudo_target= torch.max(targets_u, dim=-1)
+
+        return pseudo_target.detach().long(), max_probs.detach()
+
     def forward(
             self, logits_x, logits_wu, logits_su, # pred
             targets_x, # label data target
@@ -54,8 +68,10 @@ class CReSTLoss(nn.Module):
         Lx = self.x_criterion(logits_x, targets_x)
 
         # Compute unsupervised loss.
-        pseudo_target, pseudo_probs = self._get_pseudo_target(logits_wu, gt_p_data, p_data, t)
+        # pseudo_target, pseudo_probs = self._get_pseudo_target(logits_wu, gt_p_data, p_data, t)
+        pseudo_target, pseudo_probs = self._get_pseudo_target(logits_x, logits_wu, t)
+
         mask = pseudo_probs.ge(self.threshold).float()
         Lu = (self.u_criterion(logits_su, pseudo_target) * mask).mean()
-
+        
         return Lx + self.lambda_u * Lu, Lx, Lu, pseudo_probs

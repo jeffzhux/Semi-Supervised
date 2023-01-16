@@ -227,7 +227,7 @@ class Trainer(object):
                 kl_divergence(
                     prob_a = torch.ones(self.cfg.num_classes, device=self.p_model().device) / self.cfg.num_classes,
                     prob_b = self.p_model()
-                )
+                ), epoch
             )
 
 
