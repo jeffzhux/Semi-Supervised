@@ -64,11 +64,11 @@ class Trainer(object):
         self.p_model = MovingAverage(num_classes=10)
         sample_weight = (np.array(self.unlabeled_dataset.p_data)[::-1]/self.unlabeled_dataset.p_data[0]).tolist()
         
-        distributedSampler = torch.utils.data.distributed.DistributedSampler
-        weightDistributedSampler = WeightDistributedSampler
+        train_sampler = torch.utils.data.distributed.DistributedSampler
+
         self.labeled_trainloader = DataLoader(
             self.labeled_dataset,
-            sampler=distributedSampler(self.labeled_dataset),
+            sampler=train_sampler,
             batch_size=self.cfg.batch_size,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -79,7 +79,7 @@ class Trainer(object):
 
         self.unlabeled_trainloader = DataLoader(
             self.unlabeled_dataset,
-            sampler=weightDistributedSampler(self.unlabeled_dataset, sample_weight),
+            sampler = train_sampler,
             batch_size=self.cfg.batch_size * self.cfg.mu,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -169,9 +169,10 @@ class Trainer(object):
             
             logits = self.model(inputs)
             logits = de_interleave(logits, 2*self.cfg.mu+1)
-            logits_x = logits[:batch_size]
-            logits_wu, logits_su = logits[batch_size:].chunk(2)
+            logits_x = logits[:batch_size] # label data
+            logits_wu, logits_su = logits[batch_size:].chunk(2) # unlabeled data
             del logits
+
             loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.gt_p_data, self.p_model(), current_dalign_t)
             
             loss.backward()
