@@ -19,20 +19,6 @@ from models.build import build_model
 from losses.build import build_loss
 from optimizers.build import build_optimizer
 
-class MovingAverage:
-    """Class which accumilates moving average of distribution of labels."""
-    def __init__(self, num_classes, buffer_size = 128, device='cuda'):
-        # Mean
-        self.ma = torch.ones(size=(buffer_size, num_classes), device=device) / num_classes
-
-    def __call__(self):
-        v = self.ma.mean(dim=0)
-        return v / v.sum()
-    
-    def update(self, entry):
-        entry = torch.mean(entry, dim=0, keepdim=True)
-        self.ma = torch.cat([self.ma[1:], entry])
-
 def interleave(x, size):
     s = list(x.shape)
     return x.reshape([-1, size] + s[1:]).transpose(0, 1).reshape([-1] + s[1:])
@@ -59,16 +45,14 @@ class Trainer(object):
             if cfg.dataset == 'cifar10':
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
 
-        self.gt_p_data = torch.as_tensor(self.labeled_dataset.p_data, device='cuda')
-        # buffer
-        self.p_model = MovingAverage(num_classes=10)
-        sample_weight = (np.array(self.unlabeled_dataset.p_data)[::-1]/self.unlabeled_dataset.p_data[0]).tolist()
-        
+        self.sample_rate = torch.as_tensor(self.labeled_dataset.p_data, device='cuda')
+        self.sample_rate = torch.flip(self.sample_rate, dims=(0,))/self.sample_rate[0]
+
         train_sampler = torch.utils.data.distributed.DistributedSampler
 
         self.labeled_trainloader = DataLoader(
             self.labeled_dataset,
-            sampler=train_sampler,
+            sampler=train_sampler(self.labeled_dataset),
             batch_size=self.cfg.batch_size,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -79,7 +63,7 @@ class Trainer(object):
 
         self.unlabeled_trainloader = DataLoader(
             self.unlabeled_dataset,
-            sampler = train_sampler,
+            sampler = train_sampler(self.unlabeled_dataset),
             batch_size=self.cfg.batch_size * self.cfg.mu,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -173,8 +157,8 @@ class Trainer(object):
             logits_wu, logits_su = logits[batch_size:].chunk(2) # unlabeled data
             del logits
 
-            loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.gt_p_data, self.p_model(), current_dalign_t)
-            
+            loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.sample_rate, current_dalign_t)
+            exit()
             loss.backward()
 
             losses.update(loss.item())
@@ -183,9 +167,6 @@ class Trainer(object):
 
             self.optimizer.step()
             self.optimizer.zero_grad()
-
-            # pseudo label buffer
-            self.p_model.update(F.softmax(logits_su.clone().detach(), dim=-1))
             
             batch_time.update(time.time() - iter_end)
             iter_end = time.time()

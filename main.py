@@ -55,8 +55,8 @@ def main_worker(rank, world_size, cfg):
         dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
                             world_size=world_size, rank=rank)
     
-    # trainer = CReST_Trainer(cfg, rank)
-    trainer = Trainer(cfg, rank)
+    trainer = CReST_Trainer(cfg, rank)
+    # trainer = Trainer(cfg, rank)
     trainer.fit()
 
 def main():
@@ -67,7 +67,7 @@ def main():
     print(f'GPUs on this node: {cfg.world_size}')
     cfg.bsz_gpu = int(cfg.batch_size / cfg.world_size)
     print('batch_size per gpu:', cfg.bsz_gpu)
-
+    
     log_file = os.path.join(cfg.work_dir, f'{cfg.timestamp}.cfg')
     with open(log_file, 'a') as f:
         f.write(cfg.pretty_text)

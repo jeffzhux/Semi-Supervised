@@ -57,7 +57,7 @@ dataset = 'cifar10'
 data = dict(
     split = dict(
         beta = 0.1,
-        gamma = 100,
+        gamma = 200,
         num_classes = 10
     ),
 
