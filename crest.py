@@ -158,7 +158,7 @@ class Trainer(object):
             del logits
 
             loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.sample_rate, current_dalign_t)
-            exit()
+
             loss.backward()
 
             losses.update(loss.item())
@@ -205,12 +205,6 @@ class Trainer(object):
             self.writer.add_scalar('Train/loss_x', losses_x.avg, epoch)
             self.writer.add_scalar('Train/loss_u', losses_u.avg, epoch)
             self.writer.add_scalar('Monitor/mask', mask_probs.avg, epoch)
-            self.writer.add_scalar('Monitor/kl',
-                kl_divergence(
-                    prob_a = torch.ones(self.cfg.num_classes, device=self.p_model().device) / self.cfg.num_classes,
-                    prob_b = self.p_model()
-                ), epoch
-            )
 
 
     def valid(self, epoch):

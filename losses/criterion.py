@@ -24,7 +24,9 @@ class FixMatchLoss(nn.Module):
 class CReSTLoss(nn.Module):
     def __init__(self, threshold, lambda_u = 1.0, T = 1.0):
         super(CReSTLoss, self).__init__()
-        self.threshold = 0.5#threshold
+        # print('記得要還原 CrestLoss')
+        self.threshold = threshold
+        # self.threshold = 0.5
         self.lambda_u = lambda_u
         self.T = T
         self.x_criterion = nn.CrossEntropyLoss(reduction='mean')
@@ -40,8 +42,8 @@ class CReSTLoss(nn.Module):
 
     def _class_rebalancing(self, pseudo_target, pseudo_probs, gt_p_data):
 
-        # mask = pseudo_probs.ge(self.threshold)
-        #pseudo_target = pseudo_target * mask 可考慮信心度跟不考慮信心度
+        mask = pseudo_probs.ge(self.threshold)
+        pseudo_target = pseudo_target * mask #可考慮信心度跟不考慮信心度
         unique, count = torch.unique(pseudo_target, return_counts=True)
         if unique[0] == 0:
             # ignore class zero
@@ -60,7 +62,7 @@ class CReSTLoss(nn.Module):
             sub_mask[class_rebalancing_indices] = 1
             class_rebalancing_mask = torch.logical_or(class_rebalancing_mask, sub_mask)
 
-            #print(f'class : {class_idx}, mask num : {sum(class_mask)}, rebalance class : {torch.sum(class_rebalancing_mask.float())}')
+            # print(f'class : {class_idx}, mask num : {sum(class_mask)}, rebalance class : {torch.sum(class_rebalancing_mask.float())}')
         return class_rebalancing_mask.float()
     def forward(
             self, logits_x, logits_wu, logits_su, # pred
@@ -79,5 +81,5 @@ class CReSTLoss(nn.Module):
         class_rebalancing_mask = self._class_rebalancing(pseudo_target, pseudo_probs, gt_p_data)
 
         Lu = (self.u_criterion(logits_su, pseudo_target) * mask * class_rebalancing_mask).mean()
-        
+
         return Lx + self.lambda_u * Lu, Lx, Lu, pseudo_probs
