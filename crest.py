@@ -60,6 +60,7 @@ class Trainer(object):
             prefetch_factor=2,
             persistent_workers=True
         )
+        
 
         self.unlabeled_trainloader = DataLoader(
             self.unlabeled_dataset,
@@ -89,7 +90,9 @@ class Trainer(object):
         self.model_without_ddp = self.model.module
         
         # build criterion & optimizer
+        cfg.loss['cls_num_list'] = self.labeled_dataset.cls_num_list
         self.criterion = build_loss(cfg.loss).cuda()
+
         self.optimizer = build_optimizer(cfg.optimizer, self.model.parameters())
         self.optimizer.zero_grad()
 
@@ -111,7 +114,6 @@ class Trainer(object):
         losses = AverageMeter()
         losses_x = AverageMeter()
         losses_u = AverageMeter()
-        mask_probs = AverageMeter()
 
         # data
         labeled_epoch = 0
@@ -124,7 +126,7 @@ class Trainer(object):
 
         # utils
         # control the temperature-scaled distribution
-        current_dalign_t = self._get_dalign_t(epoch)
+        #current_dalign_t = self._get_dalign_t(epoch)
 
         p_bar = tqdm(range(self.cfg.iters), disable=self.rank not in [-1, 0])
         for batch_idx in range(self.cfg.iters):
@@ -157,20 +159,19 @@ class Trainer(object):
             logits_wu, logits_su = logits[batch_size:].chunk(2) # unlabeled data
             del logits
 
-            loss, Lx, Lu, max_probs = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.sample_rate, current_dalign_t)
+            loss, expert1, expert2 = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.sample_rate)
 
             loss.backward()
 
             losses.update(loss.item())
-            losses_x.update(Lx.item())
-            losses_u.update(Lu.item())
+            losses_x.update(expert1.item())
+            losses_u.update(expert2.item())
 
             self.optimizer.step()
             self.optimizer.zero_grad()
             
             batch_time.update(time.time() - iter_end)
             iter_end = time.time()
-            mask_probs.update(max_probs.mean().item())
 
             # print info
             lr = self.optimizer.param_groups[0]['lr']
@@ -180,9 +181,8 @@ class Trainer(object):
                 f'Batch: {batch_time.avg:.3f}, '
                 f'lr: {lr:.5f}, '
                 f'loss: {losses.avg:.3f}, '
-                f'loss_x: {losses_x.avg:.3f}, '
-                f'loss_u: {losses_u.avg:.3f}, '
-                f'mask: {mask_probs.avg:.3f} '
+                f'expert1: {losses_x.avg:.3f}, '
+                f'expert2: {losses_u.avg:.3f}'
             )
             p_bar.update()
 
@@ -193,18 +193,16 @@ class Trainer(object):
                         f'Batch: {batch_time.avg:.3f}, '
                         f'lr: {lr:.5f}, '
                         f'train_loss: {losses.avg:.3f}, '
-                        f'train_loss_x: {losses_x.avg:.3f}, '
-                        f'train_loss_u: {losses_u.avg:.3f}, '
-                        f'mask: {mask_probs.avg:.3f} '
+                        f'train_loss_expert1: {losses_x.avg:.3f}, '
+                        f'train_loss_expert2: {losses_u.avg:.3f}, '
             )
         
         if self.writer is not None:
             lr = self.optimizer.param_groups[0]['lr']
             self.writer.add_scalar('Train/lr', lr, epoch)
             self.writer.add_scalar('Train/loss', losses.avg, epoch)
-            self.writer.add_scalar('Train/loss_x', losses_x.avg, epoch)
-            self.writer.add_scalar('Train/loss_u', losses_u.avg, epoch)
-            self.writer.add_scalar('Monitor/mask', mask_probs.avg, epoch)
+            self.writer.add_scalar('Train/expert1', losses_x.avg, epoch)
+            self.writer.add_scalar('Train/expert2', losses_u.avg, epoch)
 
 
     def valid(self, epoch):
@@ -212,9 +210,12 @@ class Trainer(object):
 
         batch_time = AverageMeter()
         data_time = AverageMeter()
-        losses = AverageMeter()
-        top1 = AverageMeter()
-        top5 = AverageMeter()
+        expert1_losses = AverageMeter()
+        expert2_losses = AverageMeter()
+        expert1_top1 = AverageMeter()
+        expter1_top5 = AverageMeter()
+        expert2_top1 = AverageMeter()
+        expter2_top5 = AverageMeter()
         
         epoch_end  = time.time()
         iter_end = time.time()
@@ -227,12 +228,20 @@ class Trainer(object):
                 targets = targets.cuda()
 
                 outputs = self.model(inputs)
-                loss = F.cross_entropy(outputs, targets)
+                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+                expert1_loss = F.cross_entropy(outputs[0], targets)
+                expert2_loss = F.cross_entropy(outputs[1], targets)
 
-                acc1, acc5 = accuracy(outputs, targets, topk=(1, 5))
-                losses.update(loss.item(), inputs.shape[0])
-                top1.update(acc1.item(), inputs.shape[0])
-                top5.update(acc5.item(), inputs.shape[0])
+                expert1_acc1, expert1_acc5 = accuracy(outputs[0], targets, topk=(1, 5))
+                expert2_acc1, expert2_acc5 = accuracy(outputs[1], targets, topk=(1, 5))
+
+                expert1_losses.update(expert1_loss.item(), inputs.shape[0])
+                expert2_losses.update(expert2_loss.item(), inputs.shape[0])
+
+                expert1_top1.update(expert1_acc1.item(), inputs.shape[0])
+                expter1_top5.update(expert1_acc5.item(), inputs.shape[0])
+                expert2_top1.update(expert2_acc1.item(), inputs.shape[0])
+                expter2_top5.update(expert2_acc5.item(), inputs.shape[0])
 
                 batch_time.update(time.time() - iter_end)
                 iter_end = time.time()
@@ -241,16 +250,22 @@ class Trainer(object):
         if self.logger is not None: 
             epoch_time = format_time(time.time() - epoch_end)
             self.logger.info(f'Valid Epoch [{epoch}] - test_time: {epoch_time}, '
-                        f'loss: {losses.avg:.3f}, '
-                        f'top1: {top1.avg:.3f}, '
-                        f'top5: {top5.avg:.3f} '
+                        f'expert1 loss: {expert1_losses.avg:.3f}, '
+                        f'expert2 loss: {expert2_losses.avg:.3f}, '
+                        f'expert1_top1: {expert1_top1.avg:.3f}, '
+                        f'expter1_top5: {expter1_top5.avg:.3f}, '
+                        f'expert2_top1: {expert2_top1.avg:.3f}, '
+                        f'expter2_top5: {expter2_top5.avg:.3f} '
             )
         
         if self.writer is not None:
             lr = self.optimizer.param_groups[0]['lr']
-            self.writer.add_scalar('Valid/loss', losses.avg, epoch)
-            self.writer.add_scalar('Valid/top1', top1.avg, epoch)
-            self.writer.add_scalar('Valid/top5', top5.avg, epoch)
+            self.writer.add_scalar('Valid/expert1 loss', expert1_losses.avg, epoch)
+            self.writer.add_scalar('Valid/expert1_top1', expert1_top1.avg, epoch)
+            self.writer.add_scalar('Valid/expter1_top5', expter1_top5.avg, epoch)
+            self.writer.add_scalar('Valid/expert2 loss', expert2_losses.avg, epoch)
+            self.writer.add_scalar('Valid/expert2_top1', expert2_top1.avg, epoch)
+            self.writer.add_scalar('Valid/expter2_top5', expter2_top5.avg, epoch)
 
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:

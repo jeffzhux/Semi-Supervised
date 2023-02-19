@@ -1,1 +1,1 @@
-from losses.criterion import FixMatchLoss, CReSTLoss
+from losses.criterion import FixMatchLoss, CReSTLoss, DiverseExpertLoss

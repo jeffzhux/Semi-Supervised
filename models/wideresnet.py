@@ -113,3 +113,64 @@ class WideResNet(nn.Module):
         out = F.adaptive_avg_pool2d(out, 1)
         out = out.view(-1, self.channels)
         return self.fc(out)
+
+class WideResNet2expert(nn.Module):
+    def __init__(self, num_classes, depth=28, widen_factor=2, drop_rate=0.0):
+        super(WideResNet2expert, self).__init__()
+        self.num_of_expert = 2
+        channels = [16, 16*widen_factor, 32*widen_factor, 64*widen_factor]
+        assert((depth - 4) % 6 == 0)
+        n = (depth - 4) / 6
+        block = BasicBlock
+        # 1st conv before any network block
+        self.conv1 = nn.Conv2d(3, channels[0], kernel_size=3, stride=1,
+                               padding=1, bias=False)
+        # 1st block
+        self.block1 = NetworkBlock(n, channels[0], channels[1], block, 1, drop_rate, activate_before_residual=True)
+        # 2nd block
+        self.block2 = NetworkBlock(n, channels[1], channels[2], block, 2, drop_rate)
+        # 3rd block
+        self.block3s = nn.ModuleList([NetworkBlock(n, channels[2], channels[3], block, 2, drop_rate) for i in range(self.num_of_expert)])
+        # global average pooling and classifier
+        self.bn1s = nn.ModuleList([nn.BatchNorm2d(channels[3], momentum=0.001) for i in range(self.num_of_expert)])
+        self.relu = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+        self.fcs = nn.ModuleList([nn.Linear(channels[3], num_classes) for i in range(self.num_of_expert)])
+        self.channels = channels[3]
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
+                                        nonlinearity='leaky_relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0.0)
+            elif isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                nn.init.constant_(m.bias, 0.0)
+
+    def _separate_part(self, x, ind):
+        x = self.block3s[ind](x)
+        x = self.relu(self.bn1s[ind](x))
+        x = F.adaptive_avg_pool2d(x, 1)
+        x = x.view(-1, self.channels)
+        return self.fcs[ind](x)
+
+    def forward(self, x):
+        outs = []
+
+        out = self.conv1(x)
+        out = self.block1(out)
+        out = self.block2(out)
+        for i in range(self.num_of_expert):
+            outs.append(self._separate_part(out, i))
+
+        return torch.stack(outs, dim=1) #(B, Expert, logit)
+
+if __name__ == '__main__':
+    model = WideResNet2expert(10)
+    _input = torch.rand((4,3,64,64))
+    output = model(_input) # (B, C, W, H) -> (B, Expert, logit)
+    output = output.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+
+    pass

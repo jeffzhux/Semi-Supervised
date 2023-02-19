@@ -1,1 +1,1 @@
-from models.wideresnet import WideResNet
+from models.wideresnet import WideResNet, WideResNet2expert
