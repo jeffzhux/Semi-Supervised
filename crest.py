@@ -91,6 +91,7 @@ class Trainer(object):
         
         # build criterion & optimizer
         cfg.loss['cls_num_list'] = self.labeled_dataset.cls_num_list
+        cfg.loss['gt_p_data'] = self.sample_rate
         self.criterion = build_loss(cfg.loss).cuda()
 
         self.optimizer = build_optimizer(cfg.optimizer, self.model.parameters())
@@ -159,7 +160,7 @@ class Trainer(object):
             logits_wu, logits_su = logits[batch_size:].chunk(2) # unlabeled data
             del logits
 
-            loss, expert1, expert2 = self.criterion(logits_x, logits_wu, logits_su, targets_x, self.sample_rate)
+            loss, expert1, expert2 = self.criterion(logits_x, logits_wu, logits_su, targets_x)
 
             loss.backward()
 

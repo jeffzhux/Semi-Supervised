@@ -5,11 +5,11 @@ from torchvision.datasets import CIFAR10
 
 
 
-a = torch.tensor([0.4026, 0.2415, 0.1449, 0.0870, 0.0523, 0.0314, 0.0185, 0.0113, 0.0064, 0.0040])
+a = torch.tensor([0.2154, 0.2520, 0.3037, 0.3583, 0.4273, 0.5066, 0.6000, 0.7114, 0.8434, 1.0000])
+a
 
-
-b = torch.tensor([0,1,2,3,4,5,1,2,1,2,3,1,2,4,3,5,3,2,1,3,2,3])
-print(torch.where(b==1)[0])
+b = torch.tensor([0,1,2,3,4,5,1,2,1,2,3,1,2,4,3,5,3,2,1,3,2,3, 9])
+print(a[b])
 # unique, indices, count = torch.unique(b, return_inverse =True, return_counts=True)
 
 # if unique[0] == 0:
