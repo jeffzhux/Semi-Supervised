@@ -141,14 +141,15 @@ class DiverseExpertLoss(nn.Module):
         expert1_su_logits = logits_su[0]
         expert2_su_logits = logits_su[1]
 
+         
         # Softmax loss for expert 1 -> long tail
         expert1_loss = self.base_loss(expert1_x_logits, expert2_wu_logits, expert1_su_logits, targets_x)
         loss += expert1_loss
-
-        # Balanced Softmax loss for expert 2 
+        
+        # Balanced Softmax loss for expert 2
         expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
-        expert2_wu_logits = expert2_wu_logits + torch.log(self.prior + 1e-9)
         expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
+        expert2_wu_logits = expert2_wu_logits + torch.log(self.prior + 1e-9)
         expert2_loss = self.base_loss(expert2_x_logits, expert1_wu_logits, expert2_su_logits, targets_x, do_resampling=True)
         loss += expert2_loss
 

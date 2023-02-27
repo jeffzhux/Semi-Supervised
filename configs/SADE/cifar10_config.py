@@ -58,7 +58,7 @@ num_workers = 4
 dataset = 'cifar10'
 data = dict(
     split = dict(
-        beta = 0.1,
+        beta = 0.3,
         gamma = 100,
         num_classes = 10
     ),
