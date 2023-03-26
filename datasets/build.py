@@ -73,6 +73,31 @@ def get_cifar10(cfg:ConfigDict):
 
     return label_dataset, unlabel_dataset, valid_dataset
 
+def get_cifar100(cfg:ConfigDict):
+    args = cfg.copy()
+    base_args = args.pop('base')
+    split_args = args.pop('split')
+    label_args = args.pop('train_labeled')
+    unlabel_args =args.pop('train_unlabeled')
+    valid_args = args.pop('valid')
+
+    base_dataset = build_dataset(base_args)
+    split_args['num_classes'] = 100
+    label_idx, unlabel_idx = x_u_split(base_dataset.targets, split_args)
+
+    # labeled
+    label_args['indexs'] = label_idx
+    label_dataset = build_dataset(label_args)
+
+    # unlabeled
+    unlabel_args['indexs'] = unlabel_idx
+    unlabel_dataset = build_dataset(unlabel_args)
+
+    # valid
+    valid_dataset = build_dataset(valid_args)
+
+    return label_dataset, unlabel_dataset, valid_dataset
+
 def build_dataset(cfg: ConfigDict):
     args = cfg.copy()
     

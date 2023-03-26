@@ -93,7 +93,6 @@ class DiverseExpertLoss(nn.Module):
         self.T = T
         self.x_criterion = nn.CrossEntropyLoss(reduction='mean')
         self.u_criterion = nn.CrossEntropyLoss(reduction='none')
-
         prior = np.array(cls_num_list) / np.sum(cls_num_list)
         self.prior = torch.tensor(prior).float().cuda()
         self.gt_p_data = gt_p_data ** (1/3)
