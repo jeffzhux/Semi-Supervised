@@ -168,9 +168,19 @@ class WideResNet2expert(nn.Module):
         return torch.stack(outs, dim=1) #(B, Expert, logit)
 
 if __name__ == '__main__':
-    model = WideResNet2expert(10)
-    _input = torch.rand((4,3,64,64))
-    output = model(_input) # (B, C, W, H) -> (B, Expert, logit)
-    output = output.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+    from torchsummary import summary
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # PyTorch v0.4.0
+    device = 'cpu'
+    model = WideResNet(10).to(device)
+
+    _input = torch.rand((1,3,32,32))
+    torch.onnx.export(model, _input, 'wideResNet.onnx')
+    summary(model, (3, 32, 32))
+    print(model)
+    # _input = torch.rand((4,3,32,32))
+    # output = model(_input) # (B, C, W, H) -> (B, Expert, logit)
+
+    # output = output.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
 
     pass

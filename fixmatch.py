@@ -15,7 +15,6 @@ from utils.build import build_logger
 from datasets.build import get_cifar10, get_cifar100
 from datasets.sampler.distributed import WeightDistributedSampler
 
-from fixmatch import Trainer
 from models.build import build_model
 from losses.build import build_loss
 from optimizers.build import build_optimizer
@@ -29,7 +28,7 @@ def de_interleave(x, size):
     s = list(x.shape)
     return x.reshape([size, -1] + s[1:]).transpose(0, 1).reshape([-1] + s[1:])
 
-class CReST_Trainer(Trainer):
+class Trainer(object):
     def __init__(self, cfg: ConfigDict, rank:int):
         self.cfg = cfg
         self.rank = rank
@@ -103,8 +102,6 @@ class CReST_Trainer(Trainer):
         self.model_without_ddp = self.model.module
         
         # build criterion & optimizer
-        cfg.loss['cls_num_list'] = self.labeled_dataset.cls_num_list
-        cfg.loss['gt_p_data'] = self.sample_rate
         self.criterion = build_loss(cfg.loss).cuda()
 
         self.optimizer = build_optimizer(cfg.optimizer, self.model.parameters())
@@ -112,11 +109,6 @@ class CReST_Trainer(Trainer):
 
         self.start_epoch = 1
         self.epochs = cfg.epochs
-        self.dalign_t = cfg.dalign_t
-        
-    def _get_dalign_t(self, current_epoch):
-        cur = current_epoch / (self.epochs - 1)
-        return (1.0 - cur) * 1.0 + cur * self.dalign_t
 
     def train(self, epoch):
         self.model.train()
@@ -283,26 +275,21 @@ class CReST_Trainer(Trainer):
 
     def test(self):
         self.model.eval()
-        preds_expert1 = []
-        preds_expert2 = []
+
+        preds = []
         labels = []
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(self.valid_loader):
 
                 inputs = inputs.cuda()
-                targets = targets.cuda()
+                targets = targets
 
                 outputs = self.model(inputs)
-                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+                pred = torch.argmax(outputs, dim=-1).cpu()
 
-                expert1 = torch.argmax(outputs[0], dim=-1).cpu()
-                expert2 = torch.argmax(outputs[1], dim=-1).cpu()
-                preds_expert1.extend(expert1.tolist())
-                preds_expert2.extend(expert2.tolist())
+                preds.extend(pred.tolist())
                 labels.extend(targets.tolist())
-                
-        print(metrics.classification_report(labels, preds_expert1, digits=3))
-        print(metrics.classification_report(labels, preds_expert2, digits=3))
+        print(metrics.classification_report(labels, preds))
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:
             model_path = os.path.join(self.cfg.work_dir, f'epoch_{epoch}.pth')

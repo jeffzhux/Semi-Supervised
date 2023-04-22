@@ -35,7 +35,7 @@ def x_u_split(labels, args):
     labeled_idx = []
     for i in range(args.num_classes):
         num_class = max_class * ((1/args.gamma)**(i/(args.num_classes-1)))
-        num_label_class = round(num_class * args.beta)
+        num_label_class = math.ceil(num_class * args.beta)
 
         idx = np.where(labels == i)[0]
         idx = np.random.choice(idx, int(num_class), False)

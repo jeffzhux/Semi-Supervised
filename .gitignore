@@ -3,6 +3,9 @@
 *__pycache__
 __pycache__
 
+# 權重
+weights/
+
 # 實驗
 data/
 experiment/

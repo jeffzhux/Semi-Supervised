@@ -9,19 +9,24 @@ import torch.distributed as dist
 
 from utils.config import Config
 from utils.util import set_seed
-from crest import Trainer as CReST_Trainer
-from utils.trainer import Trainer
+from crest import CReST_Trainer
+from fixmatch import Trainer as FixMatch_Trainer
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='config file path')
+    parser.add_argument('--task', type=str, choices=['FixMatch','Our'])
+    parser.add_argument('--mode', type=str, choices=['train','test'])
+    parser.add_argument('--weight', type=str)
     args = parser.parse_args()
 
     return args
 
 def get_config(args: argparse.Namespace) -> Config:
     cfg = Config.fromfile(args.config)
-
+    cfg.task = args.task
+    cfg.mode = args.mode
+    cfg.weight = args.weight
     cfg.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
     # worker
@@ -55,9 +60,13 @@ def main_worker(rank, world_size, cfg):
         dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
                             world_size=world_size, rank=rank)
     
-    trainer = CReST_Trainer(cfg, rank)
-    # trainer = Trainer(cfg, rank)
-    trainer.fit()
+    trainer = CReST_Trainer(cfg, rank) if cfg.task == 'Our' else FixMatch_Trainer(cfg, rank)
+    # trainer = CReST_Trainer(cfg, rank)
+    if cfg.mode == 'train':
+        exit()
+        trainer.fit()
+    else:
+        trainer.test()
 
 def main():
     args = get_args()

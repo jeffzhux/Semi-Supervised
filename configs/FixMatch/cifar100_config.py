@@ -2,7 +2,7 @@
 
 # log & save
 port = 10001
-work_dir = './experiment/cifar10/FixMatch'
+work_dir = './experiment/cifar100/FixMatch'
 log_interval = 100
 save_interval = 20
 
@@ -53,7 +53,7 @@ loss = dict(
 
 # data
 num_workers = 4
-dataset = 'cifar10'
+dataset = 'cifar100'
 data = dict(
     split = dict(
         beta = 0.1,
@@ -62,14 +62,14 @@ data = dict(
     ),
 
     base = dict(
-        type = 'CIFAR10',
-        root = './data/cifar10',
+        type = 'CIFAR100',
+        root = './data/cifar100',
         train = True,
         download = False
     ),
     train_labeled = dict(
-        type='CIFAR10SSL',
-        root='./data/cifar10',
+        type='CIFAR100SSL',
+        root='./data/cifar100',
         train=True,
         transform = dict(
             type='weak_transform',
@@ -78,8 +78,8 @@ data = dict(
         )
     ),
     train_unlabeled = dict(
-        type='CIFAR10SSL',
-        root='./data/cifar10',
+        type='CIFAR100SSL',
+        root='./data/cifar100',
         train=True,
         transform = dict(
             type='FixMatchTransform',
@@ -96,8 +96,8 @@ data = dict(
         )
     ),
     valid = dict(
-        type='CIFAR10',
-        root='./data/cifar10',
+        type='CIFAR100',
+        root='./data/cifar100',
         train=False,
         download = False,
         transform = dict(
