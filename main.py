@@ -63,7 +63,7 @@ def main_worker(rank, world_size, cfg):
     trainer = CReST_Trainer(cfg, rank) if cfg.task == 'Our' else FixMatch_Trainer(cfg, rank)
     # trainer = CReST_Trainer(cfg, rank)
     if cfg.mode == 'train':
-        exit()
+        
         trainer.fit()
     else:
         trainer.test()

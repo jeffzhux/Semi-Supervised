@@ -3,3 +3,4 @@ yapf
 regex
 tensorboard
 tqdm
+scikit-learn
