@@ -7,7 +7,7 @@ log_interval = 100
 save_interval = 20
 
 # train
-num_classes = 10
+num_classes = 100
 epochs = 100 # 1024
 iters = 1024 # 1024
 batch_size = 128 #128
