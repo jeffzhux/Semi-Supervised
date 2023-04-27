@@ -6,27 +6,25 @@ import datasets
 from datasets.transforms.build import build_transform
 from utils.config import ConfigDict
 
-# def x_u_split(labels, args):
-#     labels = np.array(labels)
-#     label_per_class = args.num_labeled // args.num_classes
-#     unlabeled_idx = []
-#     labeled_idx = []
-#     for i in range(args.num_classes):
-#         idx = np.where(labels == i)[0]
-#         l_idx = np.random.choice(idx, label_per_class, False)
-#         unl_idx = np.setdiff1d(idx, l_idx)
+def x_u_v_split(labels, args):
+    labels = np.array(labels)
+    id, count = np.unique(labels, return_counts=True)
 
-#         unlabeled_idx.extend(unl_idx)
-#         labeled_idx.extend(l_idx)
-#     labeled_idx = np.array(labeled_idx)
-#     assert len(labeled_idx) == args.num_labeled
+    assert min(count) - 1 > args.valid, '(Num of classes - 1) is less than valid num'
+    unlabeled_idx = []
+    labeled_idx = []
+    valid_idx = []
+    for i, c in zip(id, count):
+        idx = np.where(labels == i)[0]
+        np.random.shuffle(idx)
 
-#     # if args.expand_labels or args.num_labeled < args.batch_size:
-#     #     num_expand_x = math.ceil(
-#     #         args.batch_size * args.eval_step / args.num_labeled)
-#     #     labeled_idx = np.hstack([labeled_idx for _ in range(num_expand_x)])
-#     # np.random.shuffle(labeled_idx)
-#     return labeled_idx, unlabeled_idx
+        num_label = math.ceil(args.beta*(c-args.valid))+args.valid
+        val_idx, lab_idx, unl_idx = np.split(idx, [args.valid, num_label])
+        valid_idx.extend(val_idx)
+        labeled_idx.extend(lab_idx)
+        unlabeled_idx.extend(unl_idx)
+        
+    return labeled_idx, unlabeled_idx, valid_idx
 
 def x_u_split(labels, args):
     labels = np.array(labels)
@@ -97,6 +95,34 @@ def get_cifar100(cfg:ConfigDict):
     valid_dataset = build_dataset(valid_args)
 
     return label_dataset, unlabel_dataset, valid_dataset
+
+def get_dataset(cfg: ConfigDict):
+    args = cfg.copy()
+    base_args = args.pop('base')
+    split_args = args.pop('split')
+    label_args = args.pop('train_labeled')
+    unlabel_args =args.pop('train_unlabeled')
+    valid_args = args.pop('valid')
+
+    
+    base_dataset = build_dataset(base_args)
+    split_args['num_classes'] = len(base_dataset.classes)
+    label_idx, unlabel_idx, valid_idx = x_u_v_split(base_dataset.targets, split_args)
+
+    # labeled
+    label_args['indexs'] = label_idx
+    label_dataset = build_dataset(label_args)
+
+    # unlabeled
+    unlabel_args['indexs'] = unlabel_idx
+    unlabel_dataset = build_dataset(unlabel_args)
+
+    # valid
+    valid_args['indexs'] = valid_idx
+    valid_dataset = build_dataset(valid_args)
+
+    return label_dataset, unlabel_dataset, valid_dataset
+    
 
 def build_dataset(cfg: ConfigDict):
     args = cfg.copy()

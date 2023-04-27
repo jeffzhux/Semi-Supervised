@@ -3,13 +3,21 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
 
+from datasets.build import get_cifar100
+from utils.config import Config
 
+cfg = Config.fromfile('./configs/SADE/cifar100_config.py')
+# print(cfg)
+labeled_dataset, unlabeled_dataset, valid_dataset = get_cifar100(cfg.data)
 
-a = torch.tensor([0.2154, 0.2520, 0.3037, 0.3583, 0.4273, 0.5066, 0.6000, 0.7114, 0.8434, 1.0000])
-a
-
-b = torch.tensor([0,1,2,3,4,5,1,2,1,2,3,1,2,4,3,5,3,2,1,3,2,3, 9])
-print(a[b])
+sample_rate = torch.as_tensor(labeled_dataset.p_data, device='cuda')
+sample_rate = torch.flip(sample_rate, dims=(0,))/sample_rate[0]
+print(sample_rate)
+sample_rate = torch.as_tensor(unlabeled_dataset.p_data, device='cuda')
+sample_rate = torch.flip(sample_rate, dims=(0,))/sample_rate[0]
+print(sample_rate)
+for i in sample_rate:
+    print(i.item())
 # unique, indices, count = torch.unique(b, return_inverse =True, return_counts=True)
 
 # if unique[0] == 0:
