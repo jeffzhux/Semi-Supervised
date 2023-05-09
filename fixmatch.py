@@ -12,7 +12,7 @@ from utils.util import AverageMeter
 from utils.util import accuracy, adjust_learning_rate, format_time, torch_distributed_zero_first, kl_divergence
 from utils.config import ConfigDict
 from utils.build import build_logger
-from datasets.build import get_cifar10, get_cifar100
+from datasets.build import get_cifar10, get_cifar100, get_dataset
 from datasets.sampler.distributed import WeightDistributedSampler
 
 from models.build import build_model
@@ -46,9 +46,11 @@ class Trainer(object):
             if cfg.dataset == 'cifar10':
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar10(cfg.data)
             
-            if cfg.dataset == 'cifar100':
+            elif cfg.dataset == 'cifar100':
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar100(cfg.data)
-
+            else:
+                self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_dataset(cfg.data)
+        
         self.sample_rate = torch.as_tensor(self.labeled_dataset.p_data, device='cuda')
         self.sample_rate = torch.flip(self.sample_rate, dims=(0,))/self.sample_rate[0]
 
@@ -276,7 +278,7 @@ class Trainer(object):
 
                 preds.extend(pred.tolist())
                 labels.extend(targets.tolist())
-        print(metrics.classification_report(labels, preds))
+        print(metrics.classification_report(labels, preds, target_names=self.valid_dataset.classes, digits=3))
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:
             model_path = os.path.join(self.cfg.work_dir, f'epoch_{epoch}.pth')

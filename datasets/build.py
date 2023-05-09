@@ -121,6 +121,12 @@ def get_dataset(cfg: ConfigDict):
     valid_args['indexs'] = valid_idx
     valid_dataset = build_dataset(valid_args)
 
+    # print(label_dataset.classes)
+    # print(unlabel_dataset.classes)
+    # print(np.unique(label_dataset.targets, return_counts=True))
+    # print(np.unique(unlabel_dataset.targets, return_counts=True))
+    # print(np.unique(valid_dataset.targets, return_counts=True))
+    # exit()
     return label_dataset, unlabel_dataset, valid_dataset
     
 

@@ -288,6 +288,7 @@ class CReST_Trainer(Trainer):
         preds_expert1 = []
         preds_expert2 = []
         labels = []
+
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(self.valid_loader):
 
@@ -302,9 +303,11 @@ class CReST_Trainer(Trainer):
                 preds_expert1.extend(expert1.tolist())
                 preds_expert2.extend(expert2.tolist())
                 labels.extend(targets.tolist())
-                
-        print(metrics.classification_report(labels, preds_expert1, digits=3))
-        print(metrics.classification_report(labels, preds_expert2, digits=3))
+        idx, val = np.unique(self.labeled_dataset.targets, return_counts=True)
+        for v in val:
+            print(v)
+        print(metrics.classification_report(labels, preds_expert1, target_names=self.valid_dataset.classes, digits=3))
+        print(metrics.classification_report(labels, preds_expert2, target_names=self.valid_dataset.classes, digits=3))
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:
             model_path = os.path.join(self.cfg.work_dir, f'epoch_{epoch}.pth')

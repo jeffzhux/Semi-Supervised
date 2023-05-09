@@ -55,14 +55,18 @@ def cut_image():
                 idx += 1            
 
 def count_image():
-    root_path = "F:/Semi-Supervised/data/20220524dataset_leaf/train"
+    root_path = "data/20220524dataset_leaf/leaf_num_not_enough"
 
     folders = os.listdir(root_path)
     total = 0
+    disease_dict = {}
     for folder in folders:
         files = os.listdir(f'{root_path}/{folder}')
-        print(folder, len(files))
+        # print(folder, len(files))
+        disease_dict[folder] = len(files)
         total += len(files)
+    for k, v in sorted(zip(disease_dict.keys(), disease_dict.values()), key=lambda x: x[1], reverse=True):
+        print(k)
     print(total)
 
 def resize_image():
@@ -89,5 +93,5 @@ def resize_image():
             img.save(f'{sub_output_folder}/{file}')
             
 if __name__ == '__main__':
-    resize_image()
+    count_image()
     # cut_image()

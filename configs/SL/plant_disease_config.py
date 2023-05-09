@@ -2,22 +2,20 @@
 
 # log & save
 port = 10001
-work_dir = './experiment/cifar100/SADE'
+work_dir = './experiment/plant_disease_SL'
 log_interval = 100
-save_interval = 20
+save_interval = 10
 
 # train
-num_classes = 100
-epochs = 100 # 1024
-iters = 1024 # 1024
-batch_size = 128 #128
-mu = 7 # unlabeled data batch_size = batch_size * mu
-dalign_t = 0.5 # temperature-scaled distribution
-
+num_classes = 17
+epochs = 150 # 1024
+iters = 512 # 1024
+batch_size = 2 #8
+mu = 4 # unlabeled data batch_size = batch_size * mu
 
 # model
 model = dict(
-    type='WideResNet2expert',
+    type='WideResNet',
     num_classes = num_classes,
     depth = 28,
     widen_factor = 2,
@@ -47,61 +45,56 @@ lr_cfg = dict(  # passed to adjust_learning_rate(cfg=lr_cfg)
 
 # loss
 loss = dict(
-    type = 'DiverseExpertLoss',
-    threshold = 0.95,
-    lambda_u = 1,
-    T = 1
+    type = 'CrossEntropyLoss'
 )
 
 # data
 num_workers = 4
-dataset = 'cifar100'
+dataset = 'custormer'
 data = dict(
     split = dict(
-        beta = 0.1,
-        gamma = 50,
-        num_classes = 100
+        beta = 1,
+        gamma = 100,
+        valid = 5,
+        num_classes = 17
     ),
 
     base = dict(
-        type = 'CIFAR100',
-        root = './data/cifar100',
-        train = True,
-        download = False
+        type = 'LongTailDataset',
+        root = './data/leaf_320',
+
     ),
     train_labeled = dict(
-        type='CIFAR100SSL',
-        root='./data/cifar100',
+        type='LongTailSSL',
+        root='./data/leaf_320',
         train=True,
         transform = dict(
             type='weak_transform',
-            size=32,
+            size=256,
             normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
         )
     ),
     train_unlabeled = dict(
-        type='CIFAR100SSL',
-        root='./data/cifar100',
+        type='LongTailSSL',
+        root='./data/leaf_320',
         train=True,
         transform = dict(
             type='FixMatchTransform',
             weak = dict(
                 type='weak_transform',
-                size=32,
+                size=256,
                 normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
             ),
             strong = dict(
                 type='strong_transform',
-                size=32,
+                size=256,
                 normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
             )
         )
     ),
     valid = dict(
-        type='CIFAR100',
-        root='./data/cifar100',
-        train=False,
-        download = False,
+        type='LongTailSSL',
+        root='./data/leaf_320',
         transform = dict(
             type= 'valid_transform',
             normal = [(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std

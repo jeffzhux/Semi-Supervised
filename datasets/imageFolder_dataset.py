@@ -31,6 +31,28 @@ class LongTailSSL(ImageFolder):
 
         self.p_data = (np.unique(self.targets, return_counts=True)[1]/len(indexs)).tolist()
         self.cls_num_list = np.unique(self.targets, return_counts=True)[1]
+    
+    # def find_classes(self, directory: str) -> Tuple[List[str], Dict[str, int]]:
+    #     """Finds the class folders in a dataset.
+
+    #     See :class:`DatasetFolder` for details.
+    #     """
+
+    #     classes = sorted(entry.name for entry in os.scandir(directory) if entry.is_dir())
+    #     class_and_num = []
+    #     for entry in os.scandir(directory):
+    #         if entry.is_dir():
+    #             c = (entry.name, len(next(os.walk(f'{directory}/{entry.name}'))[2]))
+    #             class_and_num.append(c)
+    #     class_and_num = sorted(class_and_num, reverse=True, key=lambda x: x[1])
+
+    #     if not class_and_num:
+    #         raise FileNotFoundError(f"Couldn't find any class folder in {directory}.")
+
+    #     classes = [cls_name for cls_name, _ in class_and_num]
+    #     class_to_idx = {cls_name: i for i, (cls_name, _) in enumerate(class_and_num)}
+
+    #     return classes, class_to_idx
     def __getitem__(self, index):
         img_path, target = self.samples[index]
         img = self.loader(img_path)

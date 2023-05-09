@@ -11,11 +11,12 @@ from utils.config import Config
 from utils.util import set_seed
 from crest import CReST_Trainer
 from fixmatch import Trainer as FixMatch_Trainer
+from supervise import SL_Trainer
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='config file path')
-    parser.add_argument('--task', type=str, choices=['FixMatch','Our'])
+    parser.add_argument('--task', type=str, choices=['FixMatch','Our', 'SL'])
     parser.add_argument('--mode', type=str, choices=['train','test'])
     parser.add_argument('--weight', type=str)
     args = parser.parse_args()
@@ -60,10 +61,14 @@ def main_worker(rank, world_size, cfg):
         dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{cfg.port}',
                             world_size=world_size, rank=rank)
     
-    trainer = CReST_Trainer(cfg, rank) if cfg.task == 'Our' else FixMatch_Trainer(cfg, rank)
-    # trainer = CReST_Trainer(cfg, rank)
+    if cfg.task == 'Our':
+        trainer = CReST_Trainer(cfg, rank)
+    elif cfg.task == 'FixMatch':
+        trainer = FixMatch_Trainer(cfg, rank)
+    else:
+        trainer = SL_Trainer(cfg, rank)
+
     if cfg.mode == 'train':
-        
         trainer.fit()
     else:
         trainer.test()

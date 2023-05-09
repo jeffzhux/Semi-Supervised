@@ -4,14 +4,14 @@
 port = 10001
 work_dir = './experiment/plant_disease/'
 log_interval = 100
-save_interval = 20
+save_interval = 10
 
 # train
 num_classes = 17
-epochs = 100 # 1024
-iters = 128 # 1024
-batch_size = 32 #128
-mu = 7 # unlabeled data batch_size = batch_size * mu
+epochs = 150 # 1024
+iters = 512 # 1024
+batch_size = 8 #128
+mu = 4 # unlabeled data batch_size = batch_size * mu
 dalign_t = 0.5 # temperature-scaled distribution
 seed = 2023
 
@@ -58,7 +58,7 @@ num_workers = 4
 dataset = 'custormer'
 data = dict(
     split = dict(
-        beta = 0.3,
+        beta = 0.8,
         gamma = 100,
         valid = 5
     ),
@@ -69,11 +69,11 @@ data = dict(
     ),
     train_labeled = dict(
         type='LongTailSSL',
-        root='./data/leaf',
+        root='./data/leaf_320',
         train = True,
         transform = dict(
             type='weak_transform',
-            size=32,
+            size=256,
             normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
         )
     ),
@@ -85,12 +85,12 @@ data = dict(
             type='FixMatchTransform',
             weak = dict(
                 type='weak_transform',
-                size=32,
+                size=256,
                 normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
             ),
             strong = dict(
                 type='strong_transform',
-                size=32,
+                size=256,
                 normal=[(0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616)] # mean, std
             )
         )
