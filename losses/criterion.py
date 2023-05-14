@@ -93,10 +93,11 @@ class DiverseExpertLoss(nn.Module):
         self.T = T
         self.x_criterion = nn.CrossEntropyLoss(reduction='mean')
         self.u_criterion = nn.CrossEntropyLoss(reduction='none')
+        self.cls_num_list = torch.tensor(cls_num_list).cuda()
+        self.bias = torch.arange(0, len(self.cls_num_list)).cuda()
         prior = np.array(cls_num_list) / np.sum(cls_num_list)
         self.prior = torch.tensor(prior).float().cuda()
         self.gt_p_data = gt_p_data ** (1/3)
-        self.C_number = len(cls_num_list)  # class number
 
     def _class_rebalancing(self, pseudo_target):
         p_pt = self.gt_p_data[pseudo_target]
@@ -113,7 +114,14 @@ class DiverseExpertLoss(nn.Module):
             mask = max_probs.ge(self.threshold).float().detach()
 
             if do_resampling:
-                mask = mask * self._class_rebalancing(targets_u)
+                mask = torch.logical_and(mask, self._class_rebalancing(targets_u))
+
+                un_select = torch.masked_select(targets_u, mask)
+                _, counts = torch.unique(torch.cat((un_select, self.bias)), return_counts  =True)
+                align = self.cls_num_list + counts
+                align = align / torch.sum(align)
+                logits_x = logits_x + torch.log(align + 1e-9)
+                logits_su = logits_su + torch.log(align + 1e-9)
                 
         Lx = self.x_criterion(logits_x, targets_x)
         Lu = (self.u_criterion(logits_su, targets_u) * mask).mean()
@@ -146,9 +154,8 @@ class DiverseExpertLoss(nn.Module):
         loss += expert1_loss
         
         # Balanced Softmax loss for expert 2
-        expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
-        expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
-        expert2_wu_logits = expert2_wu_logits + torch.log(self.prior + 1e-9)
+        # expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
+        # expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
         expert2_loss = self.base_loss(expert2_x_logits, expert1_wu_logits, expert2_su_logits, targets_x, do_resampling=True)
         loss += expert2_loss
 
