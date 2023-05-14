@@ -196,7 +196,7 @@ class Trainer(object):
                 f'mask: {mask_probs.avg:.3f} '
             )
             p_bar.update()
-
+        p_bar.close()
         if self.logger is not None: 
             epoch_time = format_time(time.time() - epoch_end)
             self.logger.info(f'Epoch [{epoch}] - epoch_time: {epoch_time}, '
