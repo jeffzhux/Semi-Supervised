@@ -116,12 +116,13 @@ class DiverseExpertLoss(nn.Module):
             if do_resampling:
                 mask = torch.logical_and(mask, self._class_rebalancing(targets_u))
 
-                un_select = torch.masked_select(targets_u, mask)
-                _, counts = torch.unique(torch.cat((un_select, self.bias)), return_counts  =True)
-                align = self.cls_num_list + counts
-                align = align / torch.sum(align)
-                logits_x = logits_x + torch.log(align + 1e-9)
-                logits_su = logits_su + torch.log(align + 1e-9)
+                # un_select = torch.masked_select(targets_u, mask)
+                # _, counts = torch.unique(torch.cat((un_select, self.bias)), return_counts  =True)
+                # align = self.cls_num_list + counts
+                # align = align / torch.sum(align)
+                
+                logits_x = logits_x + torch.log(self.prior + 1e-9)
+                logits_su = logits_su + torch.log(self.prior + 1e-9)
                 
         Lx = self.x_criterion(logits_x, targets_x)
         Lu = (self.u_criterion(logits_su, targets_u) * mask).mean()
