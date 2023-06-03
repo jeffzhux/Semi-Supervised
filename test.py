@@ -18,6 +18,7 @@ inputs = (inputs - 0.5) / 0.5
 inputs = inputs.astype(np.float32)
 
 
+
 model = WideResNet(num_classes = 17, depth = 28, widen_factor = 2, drop_rate = 0.0)
 ckpt = torch.load('./weights/plant_disease_SL/20230509_125312_1/epoch_150.pth', map_location='cuda')
 model.load_state_dict(ckpt['model_state'])

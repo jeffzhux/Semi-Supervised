@@ -85,7 +85,7 @@ class CReSTLoss(nn.Module):
 
         return Lx + self.lambda_u * Lu, Lx, Lu, pseudo_probs
 
-class DiverseExpertLoss(nn.Module):
+class TwoExpertLoss(nn.Module):
     def __init__(self, cls_num_list, gt_p_data, threshold, lambda_u = 1.0, T = 1.0):
         super().__init__()
         self.threshold = threshold
@@ -121,8 +121,8 @@ class DiverseExpertLoss(nn.Module):
                 # align = self.cls_num_list + counts
                 # align = align / torch.sum(align)
                 
-                logits_x = logits_x + torch.log(self.prior + 1e-9)
-                logits_su = logits_su + torch.log(self.prior + 1e-9)
+                # logits_x = logits_x + torch.log(self.prior + 1e-9)
+                # logits_su = logits_su + torch.log(self.prior + 1e-9)
                 
         Lx = self.x_criterion(logits_x, targets_x)
         Lu = (self.u_criterion(logits_su, targets_u) * mask).mean()
@@ -155,8 +155,88 @@ class DiverseExpertLoss(nn.Module):
         loss += expert1_loss
         
         # Balanced Softmax loss for expert 2
-        # expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
-        # expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
+        expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
+        expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
+        expert2_loss = self.base_loss(expert2_x_logits, expert1_wu_logits, expert2_su_logits, targets_x, do_resampling=True)
+        loss += expert2_loss
+
+        return loss, expert1_loss, expert2_loss
+
+class DiverseExpertLoss(nn.Module):
+    def __init__(self, cls_num_list, gt_p_data, threshold, lambda_u = 1.0, T = 1.0):
+        super().__init__()
+        self.threshold = threshold
+        self.lambda_u = lambda_u
+        self.T = T
+        self.x_criterion = nn.CrossEntropyLoss(reduction='mean')
+        self.u_criterion = nn.CrossEntropyLoss(reduction='none')
+        self.cls_num_list = torch.tensor(cls_num_list).cuda()
+        self.bias = torch.arange(0, len(self.cls_num_list)).cuda()
+        prior = np.array(cls_num_list) / np.sum(cls_num_list)
+        self.prior = torch.tensor(prior).float().cuda()
+        self.gt_p_data = gt_p_data ** (1/4)
+
+    def _class_rebalancing(self, pseudo_target):
+        p_pt = self.gt_p_data[pseudo_target]
+        random_p = torch.rand(p_pt.size(), device = p_pt.device)
+        mask = p_pt.ge(random_p).detach()
+        return mask
+
+    def base_loss(self, logits_x, logits_wu, logits_su, targets_x,
+        do_resampling=False):
+
+        with torch.no_grad():
+            pseudo_label = torch.softmax(logits_wu.detach()/self.T, dim=-1)
+            max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+            mask = max_probs.ge(self.threshold).detach()
+
+            if do_resampling:
+                
+                mask = torch.logical_and(mask, self._class_rebalancing(targets_u))
+
+                # mask = mask.float() * self._class_rebalancing(targets_u).float()
+        #         un_select = torch.masked_select(targets_u, mask)
+        #         _, counts = torch.unique(torch.cat((un_select, self.bias)), return_counts = True)
+        #         align = self.cls_num_list + counts - 1
+        #         align = align / torch.sum(align)
+
+        # if do_resampling:
+        #     logits_x = logits_x + torch.log(align + 1e-9)
+        #     logits_su = logits_su + torch.log(align + 1e-9)
+                
+        Lx = self.x_criterion(logits_x, targets_x)
+        Lu = (self.u_criterion(logits_su, targets_u) * mask.float()).mean()
+
+        return Lx + self.lambda_u * Lu
+
+    def forward(self, logits_x, logits_wu, logits_su, # pred
+            targets_x, # label data target
+        ):
+        logits_x = logits_x.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+        logits_wu = logits_wu.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+        logits_su = logits_su.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+
+        loss = 0
+        # Obtain label logits from each expert  
+        expert1_x_logits = logits_x[0]
+        expert2_x_logits = logits_x[1]
+
+        # Obtain weak augmentation unlabel logits from each expert  
+        expert1_wu_logits = logits_wu[0]
+        expert2_wu_logits = logits_wu[1]
+
+        # Obtain weak augmentation unlabel logits from each expert  
+        expert1_su_logits = logits_su[0]
+        expert2_su_logits = logits_su[1]
+
+         
+        # Softmax loss for expert 1 -> long tail
+        expert1_loss = self.base_loss(expert1_x_logits, expert2_wu_logits, expert1_su_logits, targets_x)
+        loss += expert1_loss
+        
+        # Balanced Softmax loss for expert 2
+        expert2_x_logits = expert2_x_logits + torch.log(self.prior + 1e-9)
+        expert2_su_logits = expert2_su_logits + torch.log(self.prior + 1e-9)
         expert2_loss = self.base_loss(expert2_x_logits, expert1_wu_logits, expert2_su_logits, targets_x, do_resampling=True)
         loss += expert2_loss
 

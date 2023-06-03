@@ -58,7 +58,7 @@ num_workers = 4
 dataset = 'custormer'
 data = dict(
     split = dict(
-        beta = 0.8,
+        beta = 0.5,
         gamma = 100,
         valid = 5
     ),
