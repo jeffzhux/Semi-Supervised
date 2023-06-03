@@ -92,16 +92,16 @@ class Trainer(object):
         with torch_distributed_zero_first(self.rank):
             self.model = build_model(cfg.model)
         
-        if cfg.mode == 'test' and cfg.weight != "":
+        if cfg.mode != 'train' and cfg.weight != "":
             # load checkpoint 
             print(f"==> Loading Checkpoint {cfg.weight}")
             assert os.path.isfile(cfg.weight), 'file is not exist'
             ckpt = torch.load(cfg.weight, map_location='cuda')
             self.model.load_state_dict(ckpt['model_state'])
-
-        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model).cuda()
-        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], output_device=cfg.local_rank, find_unused_parameters=True)
-        self.model_without_ddp = self.model.module
+        if cfg.mode != 'export':
+            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model).cuda()
+            self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], output_device=cfg.local_rank, find_unused_parameters=True)
+            self.model_without_ddp = self.model.module
         
         # build criterion & optimizer
         self.criterion = build_loss(cfg.loss).cuda()
@@ -264,7 +264,7 @@ class Trainer(object):
 
     def test(self):
         self.model.eval()
-
+        logits = []
         preds = []
         labels = []
         with torch.no_grad():
@@ -274,11 +274,14 @@ class Trainer(object):
                 targets = targets
 
                 outputs = self.model(inputs)
+                logits.append(outputs)
                 pred = torch.argmax(outputs, dim=-1).cpu()
 
                 preds.extend(pred.tolist())
                 labels.extend(targets.tolist())
         print(metrics.classification_report(labels, preds, target_names=self.valid_dataset.classes, digits=3))
+        print(accuracy(torch.cat(logits), torch.tensor(labels, device='cuda'), topk=(1, 3)))
+
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:
             model_path = os.path.join(self.cfg.work_dir, f'epoch_{epoch}.pth')

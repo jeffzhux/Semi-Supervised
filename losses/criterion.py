@@ -98,7 +98,7 @@ class DiverseExpertLoss(nn.Module):
         prior = np.array(cls_num_list) / np.sum(cls_num_list)
         self.prior = torch.tensor(prior).float().cuda()
         self.gt_p_data = gt_p_data ** (1/3)
-
+    
     def _class_rebalancing(self, pseudo_target):
         p_pt = self.gt_p_data[pseudo_target]
         random_p = torch.rand(p_pt.size(), device = p_pt.device)
@@ -114,8 +114,8 @@ class DiverseExpertLoss(nn.Module):
             mask = max_probs.ge(self.threshold).float().detach()
 
             if do_resampling:
-                mask = torch.logical_and(mask, self._class_rebalancing(targets_u))
-
+                # mask = torch.logical_and(mask, self._class_rebalancing(targets_u))
+                mask = mask * self._class_rebalancing(targets_u)
                 # un_select = torch.masked_select(targets_u, mask)
                 # _, counts = torch.unique(torch.cat((un_select, self.bias)), return_counts  =True)
                 # align = self.cls_num_list + counts
@@ -126,7 +126,7 @@ class DiverseExpertLoss(nn.Module):
                 
         Lx = self.x_criterion(logits_x, targets_x)
         Lu = (self.u_criterion(logits_su, targets_u) * mask).mean()
-
+        
         return Lx + self.lambda_u * Lu
 
     def forward(self, logits_x, logits_wu, logits_su, # pred

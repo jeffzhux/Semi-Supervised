@@ -2,12 +2,14 @@ import os
 import time
 from tqdm import tqdm
 
+import torch
 from utils.util import AverageMeter
 from utils.util import format_time
 from utils.config import ConfigDict
+from utils.util import accuracy
 
 from fixmatch import Trainer
-
+from sklearn import metrics
 
 class SL_Trainer(Trainer):
     def __init__(self, cfg: ConfigDict, rank:int):
@@ -83,3 +85,35 @@ class SL_Trainer(Trainer):
             self.writer.add_scalar('Train/lr', lr, epoch)
             self.writer.add_scalar('Train/loss', losses.avg, epoch)
 
+    def export(self):
+        dummy_input = torch.zeros(1, 3, 320, 320)
+        torch.onnx.export(self.model, dummy_input, './sl.onnx',
+                    verbose=False,
+                    training=torch.onnx.TrainingMode.EVAL)
+
+    def test(self):
+        self.model.eval()
+        logits = []
+        preds = []
+        labels = []
+
+        with torch.no_grad():
+            for batch_idx, (inputs, targets) in enumerate(self.valid_loader):
+
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+
+                outputs = self.model(inputs)
+
+                logits.append(outputs)
+                pred = torch.argmax(outputs, dim=-1).cpu()
+                preds.extend(pred.tolist())
+                labels.extend(targets.tolist())
+
+        # idx, val = np.unique(self.labeled_dataset.targets, return_counts=True)
+        # for v in val:
+        #     print(v)
+        print(self.valid_dataset.classes)
+        print(metrics.classification_report(labels, preds, target_names=self.valid_dataset.classes, digits=3))
+        print(accuracy(torch.cat(logits), torch.tensor(labels, device='cuda'), topk=(1, 3)))
+    

@@ -10,7 +10,7 @@ save_interval = 20
 num_classes = 10
 epochs = 100 # 1024
 iters = 1024 # 1024
-batch_size = 128 #128
+batch_size = 2 #128
 mu = 7 # unlabeled data batch_size = batch_size * mu
 dalign_t = 0.5 # temperature-scaled distribution
 

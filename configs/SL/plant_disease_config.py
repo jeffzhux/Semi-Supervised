@@ -10,7 +10,7 @@ save_interval = 10
 num_classes = 17
 epochs = 150 # 1024
 iters = 512 # 1024
-batch_size = 2 #8
+batch_size = 1 #8
 mu = 4 # unlabeled data batch_size = batch_size * mu
 
 # model
@@ -49,7 +49,7 @@ loss = dict(
 )
 
 # data
-num_workers = 4
+num_workers = 1
 dataset = 'custormer'
 data = dict(
     split = dict(

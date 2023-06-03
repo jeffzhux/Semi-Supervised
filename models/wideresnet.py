@@ -105,6 +105,11 @@ class WideResNet(nn.Module):
                 nn.init.constant_(m.bias, 0.0)
 
     def forward(self, x):
+        # x = x / 255.0
+        # x = torch.permute(x, (0, 2, 3, 1))
+        # x = (x - torch.tensor([0.4914, 0.4822, 0.4465])) /  torch.tensor([0.2471, 0.2435, 0.2616])
+        # x = torch.permute(x, (0, 3, 1, 2))
+        
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)
@@ -113,6 +118,7 @@ class WideResNet(nn.Module):
         out = F.adaptive_avg_pool2d(out, 1)
         out = out.view(-1, self.channels)
         return self.fc(out)
+        # return torch.nn.functional.softmax(self.fc(out), dim=1)
 
 class WideResNet2expert(nn.Module):
     def __init__(self, num_classes, depth=28, widen_factor=2, drop_rate=0.0):
@@ -162,9 +168,9 @@ class WideResNet2expert(nn.Module):
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)
+        # return torch.nn.functional.softmax(self._separate_part(out, 1), dim=1)
         for i in range(self.num_of_expert):
             outs.append(self._separate_part(out, i))
-
         return torch.stack(outs, dim=1) #(B, Expert, logit)
 
 if __name__ == '__main__':

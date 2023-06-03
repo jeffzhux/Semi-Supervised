@@ -93,16 +93,17 @@ class CReST_Trainer(Trainer):
         with torch_distributed_zero_first(self.rank):
             self.model = build_model(cfg.model)
         
-        if cfg.mode == 'test' and cfg.weight != "":
+        if cfg.mode != 'train' and cfg.weight != "":
             # load checkpoint 
             print(f"==> Loading Checkpoint {cfg.weight}")
             assert os.path.isfile(cfg.weight), 'file is not exist'
             ckpt = torch.load(cfg.weight, map_location='cuda')
             self.model.load_state_dict(ckpt['model_state'])
 
-        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model).cuda()
-        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], output_device=cfg.local_rank, find_unused_parameters=True)
-        self.model_without_ddp = self.model.module
+        if cfg.mode != 'export':
+            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model).cuda()
+            self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[cfg.local_rank], output_device=cfg.local_rank, find_unused_parameters=True)
+            self.model_without_ddp = self.model.module
         
         # build criterion & optimizer
         cfg.loss['cls_num_list'] = self.labeled_dataset.cls_num_list
@@ -289,7 +290,8 @@ class CReST_Trainer(Trainer):
         preds_expert1 = []
         preds_expert2 = []
         labels = []
-
+        logits1 = []
+        logits2 = []
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(self.valid_loader):
 
@@ -301,14 +303,51 @@ class CReST_Trainer(Trainer):
 
                 expert1 = torch.argmax(outputs[0], dim=-1).cpu()
                 expert2 = torch.argmax(outputs[1], dim=-1).cpu()
+
+                logits1.append(outputs[0])
+                logits2.append(outputs[1])
                 preds_expert1.extend(expert1.tolist())
                 preds_expert2.extend(expert2.tolist())
                 labels.extend(targets.tolist())
-        idx, val = np.unique(self.labeled_dataset.targets, return_counts=True)
-        for v in val:
-            print(v)
+            '''
+            for batch_idx, (inputs, targets) in enumerate(self.labeled_trainloader):
+
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+
+                outputs = self.model(inputs)
+                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+
+                expert1 = torch.argmax(outputs[0], dim=-1).cpu()
+                expert2 = torch.argmax(outputs[1], dim=-1).cpu()
+
+                logits1.append(outputs[0])
+                logits2.append(outputs[1])
+                preds_expert1.extend(expert1.tolist())
+                preds_expert2.extend(expert2.tolist())
+                labels.extend(targets.tolist())
+            for batch_idx, ((inputs, inputs_su), targets) in enumerate(self.unlabeled_trainloader):
+
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+
+                outputs = self.model(inputs)
+                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+
+                expert1 = torch.argmax(outputs[0], dim=-1).cpu()
+                expert2 = torch.argmax(outputs[1], dim=-1).cpu()
+
+                logits1.append(outputs[0])
+                logits2.append(outputs[1])
+                preds_expert1.extend(expert1.tolist())
+                preds_expert2.extend(expert2.tolist())
+                labels.extend(targets.tolist())
+            '''
         print(metrics.classification_report(labels, preds_expert1, target_names=self.valid_dataset.classes, digits=3))
         print(metrics.classification_report(labels, preds_expert2, target_names=self.valid_dataset.classes, digits=3))
+        
+        print(accuracy(torch.cat(logits1), torch.tensor(labels, device='cuda'), topk=(1, 3)))
+        print(accuracy(torch.cat(logits2), torch.tensor(labels, device='cuda'), topk=(1, 3)))
     def save(self, epoch):
         if self.rank == 0 and epoch % self.cfg.save_interval == 0:
             model_path = os.path.join(self.cfg.work_dir, f'epoch_{epoch}.pth')
@@ -318,6 +357,12 @@ class CReST_Trainer(Trainer):
                 'epoch': epoch
             }
             torch.save(state_dict, model_path)
+
+    def export(self):
+        dummy_input = torch.zeros(1, 3, 320, 320)
+        torch.onnx.export(self.model, dummy_input, './two_expert.onnx',
+                    verbose=False,
+                    training=torch.onnx.TrainingMode.EVAL)
 
     def fit(self):
         for epoch in range(self.start_epoch, self.cfg.epochs + 1):

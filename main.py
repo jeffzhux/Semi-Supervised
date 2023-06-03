@@ -17,7 +17,7 @@ def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='config file path')
     parser.add_argument('--task', type=str, choices=['FixMatch','Our', 'SL'])
-    parser.add_argument('--mode', type=str, choices=['train','test'])
+    parser.add_argument('--mode', type=str, choices=['train','test', 'export'])
     parser.add_argument('--weight', type=str)
     args = parser.parse_args()
 
@@ -31,13 +31,14 @@ def get_config(args: argparse.Namespace) -> Config:
     cfg.timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
     # worker
-    cfg.work_dir = os.path.join(cfg.work_dir, f'{cfg.timestamp}')
-    cfg.num_workers = min(cfg.num_workers, mp.cpu_count()-2)
-    os.makedirs(cfg.work_dir, exist_ok=True)
+    if cfg.mode == 'train':
+        cfg.work_dir = os.path.join(cfg.work_dir, f'{cfg.timestamp}')
+        cfg.num_workers = min(cfg.num_workers, mp.cpu_count()-2)
+        os.makedirs(cfg.work_dir, exist_ok=True)
 
-    # cfgname
-    cfg.cfgname = os.path.splitext(os.path.basename(args.config))[0]
-    assert cfg.cfgname is not None, f'{cfg.cfgname} is not exist'
+        # cfgname
+        cfg.cfgname = os.path.splitext(os.path.basename(args.config))[0]
+        assert cfg.cfgname is not None, f'{cfg.cfgname} is not exist'
 
     # seed
     if not hasattr(cfg, 'seed'):
@@ -51,7 +52,10 @@ def main_worker(rank, world_size, cfg):
 
     cfg.local_rank = rank % 8
     torch.cuda.set_device(rank)
-    set_seed(cfg.seed+rank, cuda_deterministic=False)
+    if cfg.mode == 'train':
+        set_seed(cfg.seed+rank, cuda_deterministic=False)
+    else:
+        set_seed(cfg.seed+rank)
 
     print(f'System : {platform.system()}')
     if platform.system() == 'Windows':
@@ -70,6 +74,8 @@ def main_worker(rank, world_size, cfg):
 
     if cfg.mode == 'train':
         trainer.fit()
+    elif cfg.mode == 'export':
+        trainer.export()
     else:
         trainer.test()
 
