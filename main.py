@@ -87,10 +87,11 @@ def main():
     print(f'GPUs on this node: {cfg.world_size}')
     cfg.bsz_gpu = int(cfg.batch_size / cfg.world_size)
     print('batch_size per gpu:', cfg.bsz_gpu)
-    
-    log_file = os.path.join(cfg.work_dir, f'{cfg.timestamp}.cfg')
-    with open(log_file, 'a') as f:
-        f.write(cfg.pretty_text)
+
+    if cfg.mode == 'train':
+        log_file = os.path.join(cfg.work_dir, f'{cfg.timestamp}.cfg')
+        with open(log_file, 'a') as f:
+            f.write(cfg.pretty_text)
 
     if cfg.world_size > 0:
         mp.spawn(main_worker, nprocs = cfg.world_size, args=(cfg.world_size, cfg))

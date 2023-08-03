@@ -86,6 +86,7 @@ class SL_Trainer(Trainer):
             self.writer.add_scalar('Train/loss', losses.avg, epoch)
 
     def export(self):
+        self.model.eval()
         dummy_input = torch.zeros(1, 3, 320, 320)
         torch.onnx.export(self.model, dummy_input, './sl.onnx',
                     verbose=False,
@@ -110,10 +111,33 @@ class SL_Trainer(Trainer):
                 preds.extend(pred.tolist())
                 labels.extend(targets.tolist())
 
+        for batch_idx, (inputs, targets) in enumerate(self.labeled_trainloader):
+
+                inputs = inputs.cuda()
+                targets = targets.cuda()
+
+                outputs = self.model(inputs)
+
+                # logits.append(outputs)
+                pred = torch.argmax(outputs, dim=-1).cpu()
+                preds.extend(pred.tolist())
+                labels.extend(targets.tolist())
+        # for batch_idx, ((inputs, inputs_su), targets) in enumerate(self.unlabeled_trainloader):
+
+        #     inputs = inputs.cuda()
+        #     targets = targets.cuda()
+
+        #     outputs = self.model(inputs)
+
+
+        #     logits.append(outputs)
+        #     pred = torch.argmax(outputs, dim=-1).cpu()
+        #     preds.extend(pred.tolist())
+        #     labels.extend(targets.tolist())
         # idx, val = np.unique(self.labeled_dataset.targets, return_counts=True)
         # for v in val:
         #     print(v)
         print(self.valid_dataset.classes)
         print(metrics.classification_report(labels, preds, target_names=self.valid_dataset.classes, digits=3))
-        print(accuracy(torch.cat(logits), torch.tensor(labels, device='cuda'), topk=(1, 3)))
+        # print(accuracy(torch.cat(logits), torch.tensor(labels, device='cuda'), topk=(1, 3)))
     

@@ -309,40 +309,40 @@ class CReST_Trainer(Trainer):
                 preds_expert1.extend(expert1.tolist())
                 preds_expert2.extend(expert2.tolist())
                 labels.extend(targets.tolist())
-            '''
-            for batch_idx, (inputs, targets) in enumerate(self.labeled_trainloader):
+            
+            # for batch_idx, (inputs, targets) in enumerate(self.labeled_trainloader):
 
-                inputs = inputs.cuda()
-                targets = targets.cuda()
+            #     inputs = inputs.cuda()
+            #     targets = targets.cuda()
 
-                outputs = self.model(inputs)
-                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+            #     outputs = self.model(inputs)
+            #     outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
 
-                expert1 = torch.argmax(outputs[0], dim=-1).cpu()
-                expert2 = torch.argmax(outputs[1], dim=-1).cpu()
+            #     expert1 = torch.argmax(outputs[0], dim=-1).cpu()
+            #     expert2 = torch.argmax(outputs[1], dim=-1).cpu()
 
-                logits1.append(outputs[0])
-                logits2.append(outputs[1])
-                preds_expert1.extend(expert1.tolist())
-                preds_expert2.extend(expert2.tolist())
-                labels.extend(targets.tolist())
-            for batch_idx, ((inputs, inputs_su), targets) in enumerate(self.unlabeled_trainloader):
+            #     logits1.append(outputs[0])
+            #     logits2.append(outputs[1])
+            #     preds_expert1.extend(expert1.tolist())
+            #     preds_expert2.extend(expert2.tolist())
+            #     labels.extend(targets.tolist())
+            # for batch_idx, ((inputs, inputs_su), targets) in enumerate(self.unlabeled_trainloader):
 
-                inputs = inputs.cuda()
-                targets = targets.cuda()
+            #     inputs = inputs.cuda()
+            #     targets = targets.cuda()
 
-                outputs = self.model(inputs)
-                outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
+            #     outputs = self.model(inputs)
+            #     outputs = outputs.transpose(0, 1) # (B, Expert, logit) -> (Expert, B, logit)
 
-                expert1 = torch.argmax(outputs[0], dim=-1).cpu()
-                expert2 = torch.argmax(outputs[1], dim=-1).cpu()
+            #     expert1 = torch.argmax(outputs[0], dim=-1).cpu()
+            #     expert2 = torch.argmax(outputs[1], dim=-1).cpu()
 
-                logits1.append(outputs[0])
-                logits2.append(outputs[1])
-                preds_expert1.extend(expert1.tolist())
-                preds_expert2.extend(expert2.tolist())
-                labels.extend(targets.tolist())
-            '''
+            #     logits1.append(outputs[0])
+            #     logits2.append(outputs[1])
+            #     preds_expert1.extend(expert1.tolist())
+            #     preds_expert2.extend(expert2.tolist())
+            #     labels.extend(targets.tolist())
+            
         print(metrics.classification_report(labels, preds_expert1, target_names=self.valid_dataset.classes, digits=3))
         print(metrics.classification_report(labels, preds_expert2, target_names=self.valid_dataset.classes, digits=3))
         

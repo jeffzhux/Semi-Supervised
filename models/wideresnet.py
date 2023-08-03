@@ -164,7 +164,10 @@ class WideResNet2expert(nn.Module):
 
     def forward(self, x):
         outs = []
-
+        # x = x / 255.0
+        # x = torch.permute(x, (0, 2, 3, 1))
+        # x = (x - torch.tensor([0.4914, 0.4822, 0.4465])) /  torch.tensor([0.2471, 0.2435, 0.2616])
+        # x = torch.permute(x, (0, 3, 1, 2))
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)

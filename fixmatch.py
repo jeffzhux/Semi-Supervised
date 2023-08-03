@@ -50,7 +50,7 @@ class Trainer(object):
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_cifar100(cfg.data)
             else:
                 self.labeled_dataset, self.unlabeled_dataset, self.valid_dataset = get_dataset(cfg.data)
-        
+
         self.sample_rate = torch.as_tensor(self.labeled_dataset.p_data, device='cuda')
         self.sample_rate = torch.flip(self.sample_rate, dims=(0,))/self.sample_rate[0]
 
